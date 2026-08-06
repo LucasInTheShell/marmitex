@@ -1,9 +1,14 @@
 -- Verifies the RLS rules of CLAUDE.md §6 and §7 against a real Postgres server.
 -- Runs with ON_ERROR_STOP, so a failed assertion fails the whole run.
 
+-- A null condition is a failure, not a pass: it usually means RLS filtered the
+-- row the assertion was reading, which is exactly the bug worth catching.
 create or replace function assert_true(condition boolean, message text)
 returns void language plpgsql as $$
 begin
+  if condition is null then
+    raise exception 'ASSERTION INCONCLUSIVE (null condition): %', message;
+  end if;
   if not condition then
     raise exception 'ASSERTION FAILED: %', message;
   end if;
@@ -14,27 +19,35 @@ $$;
  * The three helpers below impersonate an account the way PostgREST does:
  * the JWT `sub` claim goes into request.jwt.claims and the connection switches
  * to the `authenticated` role, which is the role RLS is written against.
+ *
+ * The role comes from the function's own SET clause rather than a `SET LOCAL`
+ * statement in the body. SET LOCAL would last until the end of the transaction,
+ * so when the whole suite runs inside one transaction the `authenticated` role
+ * would leak into the assertions that follow and silently read nothing. A SET
+ * clause is reverted when the function returns, on the exception path too.
  */
 
 create or replace function count_as(account_id uuid, query text)
-returns bigint language plpgsql as $$
+returns bigint language plpgsql
+set role = authenticated
+as $$
 declare
   result bigint;
 begin
   perform set_config('request.jwt.claims',
     json_build_object('sub', account_id)::text, true);
-  set local role authenticated;
   execute query into result;
   return result;
 end;
 $$;
 
 create or replace function run_as(account_id uuid, statement text)
-returns void language plpgsql as $$
+returns void language plpgsql
+set role = authenticated
+as $$
 begin
   perform set_config('request.jwt.claims',
     json_build_object('sub', account_id)::text, true);
-  set local role authenticated;
   execute statement;
 end;
 $$;
@@ -44,12 +57,13 @@ create or replace function expect_error(
   statement text,
   expected_sqlstate text,
   expected_message text default null
-) returns void language plpgsql as $$
+) returns void language plpgsql
+set role = authenticated
+as $$
 begin
   begin
     perform set_config('request.jwt.claims',
       json_build_object('sub', account_id)::text, true);
-    set local role authenticated;
     execute statement;
   exception
     when others then
@@ -65,6 +79,26 @@ begin
   end;
 
   raise exception 'ASSERTION FAILED: statement was expected to fail: %', statement;
+end;
+$$;
+
+-- Signed-out callers must not be able to reach create_order through the API at
+-- all. The function also refuses them in its body, but Supabase grants EXECUTE
+-- to `anon` by default, so the grant has to be revoked explicitly.
+create or replace function expect_anon_denied()
+returns void language plpgsql
+set role = anon
+as $$
+begin
+  begin
+    execute $q$
+      select create_order('2026-08-03', '00000000-0000-0000-0000-0000000000d1',
+        'M', 'Anon', '11900000000', 'TI', '11144477735')
+    $q$;
+  exception
+    when insufficient_privilege then return;
+  end;
+  raise exception 'ASSERTION FAILED: anon must not be able to execute create_order';
 end;
 $$;
 
@@ -107,6 +141,15 @@ insert into menus (date, menu_item_ids, published) values
 select assert_true(
   count_as('00000000-0000-0000-0000-0000000000c1', 'select count(*) from menus') = 2,
   'company must only see published menus'
+);
+
+select expect_anon_denied();
+
+-- Guards the harness itself: if a helper left the connection as `authenticated`,
+-- every assertion after it would read through RLS and pass on empty results.
+select assert_true(
+  current_user <> 'authenticated',
+  'helpers must not leak the authenticated role into the rest of the suite'
 );
 
 select assert_true(

@@ -119,6 +119,7 @@ $$;
 
 create function is_staff() returns boolean
 language sql stable
+set search_path = public
 as $$
   select my_role() in ('kitchen', 'admin');
 $$;

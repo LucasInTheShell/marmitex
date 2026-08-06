@@ -27,7 +27,12 @@ for migration in "${ROOT_DIR}"/supabase/migrations/*.sql; do
 done
 
 run "${ROOT_DIR}/supabase/tests/grants.sql"
-run "${ROOT_DIR}/supabase/tests/rls.sql"
+
+# --single-transaction on purpose: it is how the suite runs when applied through
+# the Supabase SQL API, and it is the setting that exposes a helper leaking the
+# `authenticated` role into later assertions.
+psql -v ON_ERROR_STOP=1 -q --single-transaction -d "${DB_NAME}" \
+  -f "${ROOT_DIR}/supabase/tests/rls.sql"
 
 psql -v ON_ERROR_STOP=1 -q -d postgres \
   -c "drop database if exists ${DB_NAME} with (force);"
