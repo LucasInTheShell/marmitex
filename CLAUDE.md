@@ -68,19 +68,23 @@ Exceção: o **modelo de dados** deve ter os campos que a Fase 2 vai precisar (v
 
 ---
 
-## 5. Stack
+## 5. Stack e arquitetura
 
 Mínima, madura e que um dev solo consegue manter:
 
-- **Next.js** (App Router, TypeScript)
-- **Supabase** — Postgres + Auth + Realtime + RLS
+- **Next.js** (App Router, TypeScript) em `frontend-next/`
+- **FastAPI** em `backend-python/`, como monólito modular; cada módulo separa
+  `api`, `application`, `domain` e `infrastructure`
+- **PostgreSQL** local via Docker e hospedado pelo Supabase em staging/produção
 - **Tailwind CSS**
 - **Vitest** para unitários, **Playwright** para E2E
-- Deploy: **Vercel**
+- Deploy do frontend: **Vercel**; API em runtime Python separado
 
-**Por que Supabase:** o painel da cozinha precisa atualizar sozinho quando um pedido entra. Realtime do Supabase resolve isso sem WebSocket próprio. Não construa polling manual.
+**Limite do Supabase:** somente hospedagem e administração do PostgreSQL. Não usar Supabase Auth, Realtime, SDK no frontend, RLS baseada em `auth.uid()` ou acesso direto do Next.js às tabelas.
 
-**Não adicionar sem pedir:** Redis, fila de jobs, microserviço, ORM alternativo, state manager global, biblioteca de UI pesada.
+**Go posteriormente:** mensageria assíncrona, schedules, jobs e workers. Não faz parte do backend HTTP síncrono atual.
+
+**Não adicionar sem pedir:** Redis, broker de fila, microserviço adicional, ORM alternativo, state manager global, biblioteca de UI pesada.
 
 ---
 
@@ -102,15 +106,11 @@ labels_printed   id, order_id, printed_at
 - `production_status`: `pending` → `printed` → `separated` → `delivered`
 - `payment_status`: existe desde a v1, sempre `not_applicable`. **Não misturar com production_status** — foram separados de propósito.
 
-**RLS obrigatório:**
-- A conta da empresa **não tem `SELECT` em `orders`** — o pedido é "cego".
-  A escrita passa pela função `create_order()` (`SECURITY DEFINER`), porque
-  `INSERT ... RETURNING` exigiria policy de `SELECT` e exporia os pedidos dos
-  colegas pela API.
-- Cozinha e admin enxergam todos os pedidos.
-- A empresa só enxerga menus com `published = true`, e só a própria empresa.
-
-As regras acima são verificadas por `npm run test:db`.
+**Autorização obrigatória na API:**
+- A empresa não recebe endpoint para listar pedidos; o pedido continua "cego".
+- Cozinha e admin enxergam pedidos somente após validação de papel na FastAPI.
+- A empresa só recebe menus publicados e dados da própria empresa.
+- O frontend nunca é considerado uma fronteira de segurança.
 
 ---
 
@@ -147,8 +147,9 @@ Testes unitários obrigatórios para:
 - agrupamento por empresa
 - filtro de cardápio publicado
 
-Antes de dizer que uma tarefa está pronta: rodar `npm run test`, `npm run test:db`
-e `npm run test:e2e`. Não declare conclusão sem os três passando.
+Antes de dizer que uma tarefa está pronta: rodar `ruff check .` e `pytest` no
+backend; `npm run lint`, `npm run typecheck` e `npm run test` no frontend. O E2E
+usa uma stack PostgreSQL isolada e não pode apagar o banco de desenvolvimento.
 
 ---
 
@@ -157,7 +158,7 @@ e `npm run test:e2e`. Não declare conclusão sem os três passando.
 Ordenado por relação valor/esforço. Use isso para negociar prazo, não improvise fora dessa ordem.
 
 ### 🟢 Rápido (horas a 1–2 dias) — pode entrar cedo
-- **Fotos dos pratos** — upload no Supabase Storage + `<img>`. Risco baixo.
+- **Fotos dos pratos** — storage de objetos a definir + `<img>`. Risco baixo.
 - **Cardápio recorrente** (duplicar semana anterior) — economiza muito tempo da admin.
 - **Relatório simples** (quantidade por empresa/dia em CSV) — query + export, sem BI.
 - **Marcar "separado"/"entregue"** no painel da cozinha — só update de status.

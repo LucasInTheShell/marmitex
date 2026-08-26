@@ -1,0 +1,2 @@
+"""Kitchen use cases."""
+
