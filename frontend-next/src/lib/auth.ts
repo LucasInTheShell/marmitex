@@ -22,8 +22,10 @@ export function homePathFor(role: AccountRole): string {
   switch (role) {
     case "admin":
       return "/admin/empresas";
-    default:
-      return "/login";
+    case "company":
+      return "/empresa";
+    case "kitchen":
+      return "/cozinha";
   }
 }
 

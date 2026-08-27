@@ -16,7 +16,7 @@ export default function LoginPage() {
           Mavi Connect
         </h1>
         <p className="mb-8 text-sm text-stone-500">
-          Entre com o acesso da sua empresa.
+          Entre com seu acesso à operação Mavi.
         </p>
 
         <form action={formAction} className="space-y-4">
