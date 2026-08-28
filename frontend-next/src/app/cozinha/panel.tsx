@@ -152,7 +152,7 @@ export function KitchenPanel() {
       </header>
 
       <div className="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-        <strong>Impressão térmica:</strong> o navegador abrirá a janela do Windows com o layout de bobina de 80 mm. Selecione a <strong>EPSON TM-T20X Receipt</strong> e mantenha o papel configurado em 80 mm.
+        <strong>Impressão térmica:</strong> com o Modo de Impressão Mavi, a comanda é enviada diretamente para a impressora padrão. No navegador comum, selecione a <strong>EPSON TM-T20X Receipt</strong> e mantenha o papel configurado em 80 mm.
         {printMessage ? <p role="status" className="mt-1 font-medium text-sky-800">{printMessage}</p> : null}
       </div>
 

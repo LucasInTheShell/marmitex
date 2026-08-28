@@ -102,6 +102,30 @@ npm run build
 O E2E exige uma stack isolada já migrada e `E2E_DATABASE_READY=1`; ele não apaga
 automaticamente o banco de desenvolvimento.
 
+## Impressão direta na EPSON TM-T20X
+
+A comanda utiliza papel de 80 mm com área útil de 68 mm. Para imprimir com um
+clique, sem abrir a prévia do navegador:
+
+1. Instale a `EPSON TM-T20X Receipt` no Windows e configure-a como impressora
+   padrão, com papel de 80 mm.
+2. Mantenha a stack em execução em `http://localhost:3000`.
+3. Abra o terminal PowerShell na raiz do projeto e execute:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\iniciar-modo-impressao.ps1
+```
+
+4. No Edge separado que será aberto, faça login na Cozinha uma vez.
+5. Use `Imprimir comanda` ou `Imprimir mapa do dia`. O Edge iniciado pelo script
+   envia `window.print()` diretamente para a impressora padrão.
+
+O script usa um perfil separado em `%LOCALAPPDATA%\MaviConnect\EdgePrintProfile`
+para garantir que a opção de impressão em quiosque seja aplicada mesmo quando
+já existe outra janela do Edge aberta. Feche esse Edge quando não quiser mais
+impressão automática. No navegador aberto normalmente, a prévia continua sendo
+exibida.
+
 ## Supabase em staging e produção
 
 Use a connection string PostgreSQL do projeto apenas como `DATABASE_URL` do

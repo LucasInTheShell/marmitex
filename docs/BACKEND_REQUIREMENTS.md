@@ -208,12 +208,19 @@ Employee autenticado
 
 ### Estado entregue no frontend
 
-A Fila de Produção gera uma comanda em CSS de bobina de 80 mm e chama
+A Fila de Produção gera uma comanda em CSS de bobina de 80 mm, com área útil
+compacta de 68 mm, e chama
 `window.print()`. Esse fluxo funciona quando a EPSON TM-T20X Receipt está
 instalada no Windows e selecionada na janela de impressão do navegador. A
 impressão do mapa diário usa o mesmo documento térmico.
 
-O navegador não pode, por segurança, escolher uma impressora específica nem
+Para a estação fixa da cozinha, o script
+`scripts/iniciar-modo-impressao.ps1` abre um perfil separado do Microsoft Edge
+com `--kiosk-printing`. Nesse perfil, `window.print()` é encaminhado para a
+impressora padrão sem confirmação. A EPSON deve estar configurada como padrão;
+essa é uma solução operacional local e não substitui a confirmação do spooler.
+
+Um navegador iniciado normalmente não pode, por segurança, escolher uma impressora específica nem
 imprimir silenciosamente sem confirmação do usuário. O evento `afterprint`
 também não informa se a pessoa confirmou ou cancelou a impressão. Portanto, o
 frontend atual é adequado para operação assistida, mas não garante entrega

@@ -178,3 +178,18 @@ Arquivos relacionados:
 | `/cozinha` com conta Kitchen | HTTP 200 |
 | Orientação de impressão térmica | Confirmada na resposta renderizada |
 | Acesso sem sessão ao Modo TV | Redirecionado para `/login` |
+
+### Complemento — impressão direta
+
+- Área útil da comanda reduzida de 74 mm para 68 mm em bobina de 80 mm.
+- Tipografia, espaçamentos e blocos de observação compactados.
+- Adicionado `scripts/iniciar-modo-impressao.ps1` para abrir um perfil dedicado
+  do Microsoft Edge com `--kiosk-printing`.
+- Nesse modo, `window.print()` é enviado diretamente à impressora padrão, sem
+  exigir confirmação na prévia.
+- O script verifica e avisa quando a impressora padrão não corresponde à
+  `EPSON TM-T20X`.
+- O perfil dedicado preserva a sessão da Cozinha entre usos e não interfere no
+  perfil normal do Edge.
+- Sintaxe PowerShell, build, TypeScript, ESLint e 10 testes Vitest aprovados
+  após o ajuste.
