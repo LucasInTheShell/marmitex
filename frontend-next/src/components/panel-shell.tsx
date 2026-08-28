@@ -86,9 +86,13 @@ function SidebarContent({
       >
         {nav.map((item) => {
           const routePath = item.href.split("#")[0];
+          const hasMoreSpecificRoute = nav.some((candidate) => {
+            const candidatePath = candidate.href.split("#")[0];
+            return candidatePath !== routePath && candidatePath.startsWith(`${routePath}/`);
+          });
           const active =
             pathname === routePath ||
-            (routePath !== "/" && pathname.startsWith(`${routePath}/`));
+            (!hasMoreSpecificRoute && routePath !== "/" && pathname.startsWith(`${routePath}/`));
 
           return (
             <Link

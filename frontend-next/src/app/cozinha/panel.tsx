@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { ThermalPrintDocument } from "@/components/thermal-print-document";
 import {
   PRODUCTION_STATUS,
   addCalendarDays,
@@ -21,17 +22,23 @@ const COLUMN_STYLE: Record<ProductionStatus, { dot: string; top: string; empty: 
 };
 
 const NEXT_ACTION: Record<ProductionStatus, string | null> = {
-  pending: "Imprimir etiqueta",
+  pending: "Imprimir comanda",
   printed: "Marcar separado",
   separated: "Marcar entregue",
   delivered: null,
 };
+
+type PrintJob =
+  | { type: "order"; order: DemoOrder }
+  | { type: "day"; orders: DemoOrder[]; date: string };
 
 export function KitchenPanel() {
   const { orders, setOrderStatus } = useDemoOrders();
   const [selectedDate, setSelectedDate] = useState(localIsoDate());
   const [companyFilter, setCompanyFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null);
+  const [printMessage, setPrintMessage] = useState("");
 
   const dayOrders = useMemo(
     () => orders.filter((order) => order.date === selectedDate),
@@ -65,7 +72,34 @@ export function KitchenPanel() {
   const companyCount = new Set(dayOrders.map((order) => order.companyId)).size;
   const deliveredCount = dayOrders.filter((order) => order.productionStatus === "delivered").length;
 
+  useEffect(() => {
+    if (!printJob) return;
+
+    function finishPrint() {
+      if (printJob?.type === "order") {
+        setOrderStatus(printJob.order.id, "printed");
+        setPrintMessage(`Comanda do pedido de ${printJob.order.employeeName} enviada para a janela de impressão.`);
+      } else {
+        setPrintMessage("Mapa do dia enviado para a janela de impressão.");
+      }
+      setPrintJob(null);
+    }
+
+    window.addEventListener("afterprint", finishPrint, { once: true });
+    const timer = window.setTimeout(() => window.print(), 120);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("afterprint", finishPrint);
+    };
+  }, [printJob, setOrderStatus]);
+
   function advance(order: DemoOrder) {
+    if (order.productionStatus === "pending") {
+      setPrintMessage("");
+      setPrintJob({ type: "order", order });
+      return;
+    }
     const next = nextProductionStatus(order.productionStatus);
     if (next) setOrderStatus(order.id, next);
   }
@@ -105,13 +139,22 @@ export function KitchenPanel() {
           />
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => {
+              setPrintMessage("");
+              setPrintJob({ type: "day", orders: dayOrders, date: selectedDate });
+            }}
+            disabled={!dayOrders.length}
             className="rounded-md border border-stone-800 bg-stone-800 px-3 py-2 text-sm font-medium text-white hover:bg-stone-700"
           >
             Imprimir mapa do dia
           </button>
         </div>
       </header>
+
+      <div className="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+        <strong>Impressão térmica:</strong> o navegador abrirá a janela do Windows com o layout de bobina de 80 mm. Selecione a <strong>EPSON TM-T20X Receipt</strong> e mantenha o papel configurado em 80 mm.
+        {printMessage ? <p role="status" className="mt-1 font-medium text-sky-800">{printMessage}</p> : null}
+      </div>
 
       <section className="grid overflow-hidden rounded-md border border-stone-200 bg-white sm:grid-cols-4">
         <Metric label="Total do dia" value={dayOrders.length} />
@@ -231,7 +274,8 @@ export function KitchenPanel() {
                         </div>
                         <div className="my-3 border-y border-stone-100 py-3">
                           <p className="text-sm font-medium text-stone-800">{order.menuItemName}</p>
-                          <p className="mt-1 text-xs text-stone-500">{order.employeeDepartment} · final {order.employeePhone.slice(-4)}</p>
+                          <p className="mt-1 text-xs text-stone-500">{order.quantity}× · {order.employeeDepartment} · final {order.employeePhone.slice(-4)}</p>
+                          {order.notes ? <p className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">Obs.: {order.notes}</p> : null}
                         </div>
                         <div className="flex items-center gap-2">
                           <select
@@ -267,6 +311,8 @@ export function KitchenPanel() {
           </div>
         </div>
       </section>
+
+      {printJob ? <ThermalPrintDocument {...printJob} /> : null}
     </div>
   );
 }

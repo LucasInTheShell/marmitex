@@ -81,6 +81,8 @@ export function CompanyPanel({ company, cutoffTime }: CompanyPanelProps) {
       employeePhone: phone,
       employeeDepartment: String(form.get("department") ?? "").trim(),
       employeeCpf: cpf,
+      quantity: 1,
+      notes: "",
       productionStatus: "pending",
       createdAt: new Date().toISOString(),
     });

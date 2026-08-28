@@ -1,7 +1,7 @@
-# Requisitos de backend — acesso Employee
+# Requisitos de backend — extensões do frontend
 
-Este documento registra apenas as lacunas de backend introduzidas pelas telas
-de Employee. A arquitetura e as funcionalidades já implementadas continuam
+Este documento registra as lacunas de backend introduzidas pelas telas de
+Employee, impressão térmica e Modo TV. A arquitetura e as funcionalidades já implementadas continuam
 seguindo o `README.md` e permanecem como fonte de verdade.
 
 ## O que já existe e deve ser reutilizado
@@ -203,3 +203,109 @@ Employee autenticado
   inválida são rejeitados.
 - Redefinição de senha revoga sessões anteriores.
 - DTOs nunca incluem `password_hash`, token hash ou dados de outra empresa.
+
+## 11. Impressão térmica — EPSON TM-T20X Receipt
+
+### Estado entregue no frontend
+
+A Fila de Produção gera uma comanda em CSS de bobina de 80 mm e chama
+`window.print()`. Esse fluxo funciona quando a EPSON TM-T20X Receipt está
+instalada no Windows e selecionada na janela de impressão do navegador. A
+impressão do mapa diário usa o mesmo documento térmico.
+
+O navegador não pode, por segurança, escolher uma impressora específica nem
+imprimir silenciosamente sem confirmação do usuário. O evento `afterprint`
+também não informa se a pessoa confirmou ou cancelou a impressão. Portanto, o
+frontend atual é adequado para operação assistida, mas não garante entrega
+automática ao spooler.
+
+### Integração necessária para impressão automática
+
+Se a operação exigir envio direto e silencioso à EPSON, implementar um agente
+local de impressão na máquina da cozinha:
+
+- serviço Windows ou aplicativo local iniciado com o sistema;
+- integração com o spooler do Windows ou envio ESC/POS suportado pela
+  TM-T20X;
+- configuração explícita do nome da impressora, largura de 80 mm, code page
+  para português e acionamento do corte de papel;
+- canal autenticado entre o backend e o agente local, sem expor uma porta
+  irrestrita na rede;
+- fila local persistente, retentativas, timeout e indicação de offline;
+- idempotência por `order_id` e tipo de documento para evitar comandas
+  duplicadas;
+- retorno de estados `queued`, `printing`, `printed` e `failed`;
+- registro em `labels_printed` somente após confirmação do spooler/agente;
+- reimpressão auditada com usuário, data, motivo e contador de tentativas;
+- teste presencial com driver oficial EPSON, acentos, QR/codebar quando
+  aplicável, margem, densidade e corte.
+
+Endpoints sugeridos:
+
+```text
+POST /api/v1/orders/{order_id}/print-jobs
+GET  /api/v1/print-jobs/{print_job_id}
+POST /api/v1/print-jobs/{print_job_id}/retry
+```
+
+O backend deve validar a role Kitchen/Admin, produzir o payload canônico da
+comanda e nunca aceitar comandos ESC/POS arbitrários enviados pelo navegador.
+
+## 12. Modo TV e atualização em tempo real
+
+### Estado entregue no frontend
+
+A rota `/cozinha/modo-tv` é uma visualização protegida pela role Kitchen,
+sem controles de edição. Nesta etapa ela usa os pedidos mockados compartilhados
+via `localStorage`. O relógio e o tempo em fila são atualizados no próprio
+navegador; eventos de `storage` permitem apenas demonstração entre abas do
+mesmo navegador.
+
+Mapeamento visual provisório dos estados atuais:
+
+| Estado atual | Modo TV |
+| --- | --- |
+| `pending` | Aguardando |
+| `printed` | Em preparo |
+| `separated` | Prontos |
+| `delivered` | Removido do painel ativo |
+
+Antes da integração, decidir se `printed` continuará representando o início da
+produção ou se o domínio receberá estados explícitos como `in_preparation` e
+`ready`. Impressão e andamento da produção são conceitos diferentes e não
+devem permanecer acoplados caso a operação precise reimprimir uma comanda.
+
+### Contrato de leitura
+
+Disponibilizar um endpoint Kitchen somente leitura, otimizado para o dia e com
+todos os campos necessários aos cards:
+
+```text
+GET /api/v1/kitchen/production-board?date=YYYY-MM-DD
+```
+
+Cada pedido deve fornecer identificador/número operacional, funcionário,
+empresa, prato, tamanho, quantidade, observações, horário de entrada, estado e
+instante da última mudança de estado.
+
+### Sincronização
+
+Implementar uma das estratégias abaixo:
+
+1. WebSocket ou Server-Sent Events para eventos de criação e mudança de
+   estado, com reconexão e busca de snapshot após perda de conexão.
+2. Polling com `ETag`/`If-None-Match` a cada 10–30 segundos como fallback.
+
+Requisitos adicionais:
+
+- heartbeat e indicador de conexão na tela;
+- ordenação estável pelo horário de entrada;
+- horário calculado a partir do servidor para evitar relógios divergentes;
+- remoção de pedidos entregues sem apagar o histórico;
+- alerta visual/sonoro configurável para pedidos novos;
+- limite de atraso configurável por ambiente;
+- autenticação Kitchen reaproveitando a sessão atual;
+- proteção contra exposição de CPF, telefone completo ou dados não necessários
+  em uma TV visível;
+- testes de reconexão, eventos duplicados, troca de estado concorrente e grande
+  volume de pedidos.

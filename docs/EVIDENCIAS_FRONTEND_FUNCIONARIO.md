@@ -1,4 +1,4 @@
-# Evidências — Frontend de acesso do funcionário
+# Evidências — Frontend, impressão térmica e Modo TV
 
 Data da validação: 28/08/2026
 
@@ -118,3 +118,63 @@ Mensagem de commit:
 feat(frontend): adiciona fluxo e gestão mock de acesso do funcionário
 ```
 
+## Complemento — impressão térmica e Modo TV
+
+### Impressão de pedidos
+
+- A ação do pedido recebido agora abre uma comanda individual formatada para
+  bobina térmica de 80 mm.
+- A comanda contém número, horário, funcionário, empresa, setor, prato,
+  quantidade, tamanho e observações.
+- O mapa do dia também é gerado como documento térmico.
+- Após o fechamento da janela de impressão, o pedido demonstrativo avança para
+  `printed`.
+- A tela orienta selecionar a impressora `EPSON TM-T20X Receipt` no diálogo do
+  Windows.
+- A limitação do navegador para impressão silenciosa e a proposta de agente
+  local ESC/POS foram registradas em `docs/BACKEND_REQUIREMENTS.md`.
+
+Arquivos relacionados:
+
+- `frontend-next/src/components/thermal-print-document.tsx`
+- `frontend-next/src/app/cozinha/panel.tsx`
+- `frontend-next/src/app/globals.css`
+
+### Modo TV
+
+- Novo item `Modo TV` na navegação da Cozinha.
+- Nova rota protegida `/cozinha/modo-tv`.
+- Dashboard somente leitura sobrepõe o shell do painel e não exibe menu lateral.
+- Organização em `Aguardando`, `Em preparo` e `Prontos`.
+- Cards grandes com número, funcionário, empresa, prato, quantidade, tamanho,
+  horário, observações, status temporal e tempo em fila.
+- Destaques demonstrativos para pedidos novos e atrasados.
+- Relógio, atualização visual automática, rolagem por coluna e botão de tela
+  cheia.
+- Layout dimensionado para Full HD, mantendo adaptação para telas menores.
+- WebSocket/SSE, polling, reconexão e contrato de leitura foram documentados
+  como requisitos futuros de backend.
+
+Arquivos relacionados:
+
+- `frontend-next/src/app/cozinha/modo-tv/page.tsx`
+- `frontend-next/src/components/kitchen-tv-dashboard.tsx`
+- `frontend-next/src/app/cozinha/layout.tsx`
+- `frontend-next/src/lib/demo-orders.ts`
+- `frontend-next/src/lib/use-demo-orders.ts`
+- `docs/BACKEND_REQUIREMENTS.md`
+
+### Validação do complemento
+
+| Verificação | Resultado |
+| --- | --- |
+| Build de produção Next.js | Aprovado |
+| TypeScript | Aprovado |
+| ESLint | Aprovado, sem erros |
+| Vitest | 10 testes aprovados |
+| Rota `/cozinha/modo-tv` no build | Gerada |
+| `/cozinha/modo-tv` com conta Kitchen | HTTP 200 |
+| Conteúdo principal do Modo TV | Confirmado na resposta renderizada |
+| `/cozinha` com conta Kitchen | HTTP 200 |
+| Orientação de impressão térmica | Confirmada na resposta renderizada |
+| Acesso sem sessão ao Modo TV | Redirecionado para `/login` |
