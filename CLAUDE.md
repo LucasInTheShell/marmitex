@@ -116,10 +116,12 @@ labels_printed   id, order_id, printed_at
 
 ## 7. Regras de negócio (invioláveis)
 
-1. **Horário de corte:** `10:00 do mesmo dia`. Depois do corte, o dia some do
-   cardápio do colaborador. O valor vive em variável de ambiente
-   (`ORDER_CUTOFF_TIME`), **nunca hardcoded**. Fuso: `APP_TIME_ZONE`
-   (`America/Sao_Paulo`).
+1. **Horário de corte:** cada empresa possui um ou mais horários de refeição,
+   com dias da semana próprios. O limite de um pedido é calculado como
+   `data/hora da refeição - order_cutoff_lead_minutes`. A antecedência é uma
+   configuração operacional persistida e editável somente pelo Admin; o padrão
+   inicial é 90 minutos. Apenas o fuso técnico continua em `APP_TIME_ZONE`
+   (`America/Sao_Paulo`). O backend é a autoridade para aceitar ou rejeitar.
 2. Uma marmita por pessoa por dia útil — ancorada em **CPF + data**
    (`UNIQUE (employee_cpf, date)`), já que não há cadastro de colaborador.
 3. Pedidos são sempre **agrupados por empresa** no painel da cozinha — nunca listados soltos.

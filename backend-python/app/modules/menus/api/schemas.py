@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -24,7 +24,7 @@ class MenuItemResponse(BaseModel):
     name: str
     description: str | None
     size_options: list[SizeOption]
-    price: Decimal | None
+    price: float | None
 
 
 class MenuResponse(BaseModel):
@@ -34,6 +34,24 @@ class MenuResponse(BaseModel):
     date: date
     menu_item_ids: list[UUID]
     published: bool
+
+
+class AvailableMealScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    label: str
+    meal_time: time
+    scheduled_for: datetime
+    cutoff_at: datetime
+
+
+class AvailableMenuResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    items: list[MenuItemResponse]
+    available_schedules: list[AvailableMealScheduleResponse]
 
 
 class MenuSelection(BaseModel):

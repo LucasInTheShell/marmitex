@@ -34,6 +34,7 @@ backend-python/app/
 │   ├── employees/
 │   ├── menus/
 │   ├── orders/
+│   ├── operations/
 │   └── kitchen/
 └── cli/
 
@@ -64,8 +65,17 @@ Suba a stack completa:
 docker compose up --build
 ```
 
-Ou execute os processos separadamente após aplicar
-`migrations/0001_initial.sql` em um PostgreSQL:
+Os scripts de `migrations/` rodam automaticamente apenas quando o volume do
+PostgreSQL é criado. Para um banco local que já possuía a migration `0001`,
+aplique a incremental antes de reconstruir os serviços:
+
+```bash
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0002_operational_cutoff_and_company_meal_schedules.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0003_multi_item_orders.sql
+```
+
+Ou execute os processos separadamente após aplicar, em ordem, todos os arquivos
+SQL de `migrations/` em um PostgreSQL:
 
 ```bash
 cd backend-python

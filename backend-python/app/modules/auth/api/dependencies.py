@@ -64,4 +64,18 @@ async def admin_account(account: CurrentAccount) -> Account:
     return account
 
 
+async def kitchen_account(account: CurrentAccount) -> Account:
+    if account.role is not AccountRole.KITCHEN:
+        raise ForbiddenError()
+    return account
+
+
+async def company_account(account: CurrentAccount) -> Account:
+    if account.role is not AccountRole.COMPANY:
+        raise ForbiddenError()
+    return account
+
+
 AdminAccount = Annotated[Account, Depends(admin_account)]
+KitchenAccount = Annotated[Account, Depends(kitchen_account)]
+CompanyAccount = Annotated[Account, Depends(company_account)]

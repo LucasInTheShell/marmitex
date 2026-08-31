@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from app.modules.menus.domain.entities import Menu, MenuItem
+from app.modules.menus.domain.entities import AvailableMenu, Menu, MenuItem
 
 
 class MenuRepository(Protocol):
@@ -18,6 +18,10 @@ class MenuRepository(Protocol):
     ) -> MenuItem: ...
 
     async def between(self, start: date, end: date) -> list[Menu]: ...
+
+    async def published_between(
+        self, start: date, end: date
+    ) -> list[AvailableMenu]: ...
 
     async def save_week(self, menus: list[tuple[date, list[UUID]]]) -> None: ...
 

@@ -7,6 +7,7 @@ const NAV = [
   { href: "/admin/acessos-funcionarios", label: "Acessos Employee" },
   { href: "/admin/pratos", label: "Pratos" },
   { href: "/admin/cardapio", label: "Cardápio da semana" },
+  { href: "/admin/configuracoes", label: "Configurações" },
 ];
 
 export default async function AdminLayout({

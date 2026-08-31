@@ -1,37 +1,36 @@
 import { formatOrderDate } from "@/lib/demo-orders";
-import type { DemoOrder } from "@/lib/demo-orders";
+import { formatMealTime } from "@/lib/orders";
+import type { KitchenOrder } from "@/lib/types";
 
 type ThermalPrintDocumentProps =
-  | { type: "order"; order: DemoOrder }
-  | { type: "day"; orders: DemoOrder[]; date: string };
+  | { type: "order"; order: KitchenOrder }
+  | { type: "day"; orders: KitchenOrder[]; date: string };
 
 const TIME_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
   hour: "2-digit",
   minute: "2-digit",
 });
 
-function orderNumber(order: DemoOrder) {
-  const numeric = order.id.match(/\d+/)?.[0];
-  return numeric ? numeric.padStart(3, "0") : order.id.slice(-6).toUpperCase();
-}
-
-function ReceiptOrder({ order, compact = false }: { order: DemoOrder; compact?: boolean }) {
+function ReceiptOrder({ order, compact = false }: { order: KitchenOrder; compact?: boolean }) {
   return (
     <article className={compact ? "thermal-order thermal-order--compact" : "thermal-order"}>
       <div className="thermal-order__heading">
-        <strong>Pedido #{orderNumber(order)}</strong>
-        <span>{TIME_FORMATTER.format(new Date(order.createdAt))}</span>
+        <strong>Pedido #{order.order_number}</strong>
+        <span>{TIME_FORMATTER.format(new Date(order.created_at))}</span>
       </div>
-      <p className="thermal-order__employee">{order.employeeName}</p>
-      <p>{order.companyName}</p>
-      <p>{order.employeeDepartment} · final {order.employeePhone.slice(-4)}</p>
+      <p className="thermal-order__employee">{order.employee_name}</p>
+      <p>{order.company_name}</p>
+      <p>{order.employee_department} · almoço {formatMealTime(order.scheduled_for)}</p>
       <div className="thermal-order__dish">
-        <strong>{order.quantity}× {order.menuItemName}</strong>
-        <strong>Tamanho {order.size}</strong>
+        {order.items.map((item) => (
+          <div key={item.id}>
+            <strong>{item.quantity}× {item.item_name} · tamanho {item.size}</strong>
+            {item.notes ? (
+              <p className="thermal-order__notes"><strong>OBS:</strong> {item.notes}</p>
+            ) : null}
+          </div>
+        ))}
       </div>
-      {order.notes ? (
-        <p className="thermal-order__notes"><strong>OBS:</strong> {order.notes}</p>
-      ) : null}
     </article>
   );
 }
@@ -46,7 +45,7 @@ export function ThermalPrintDocument(props: ThermalPrintDocumentProps) {
 
       {props.type === "order" ? (
         <>
-          <p className="thermal-date">{formatOrderDate(props.order.date, true)}</p>
+          <p className="thermal-date">{formatOrderDate(props.order.date, true)} · {formatMealTime(props.order.scheduled_for)}</p>
           <ReceiptOrder order={props.order} />
           <footer className="thermal-footer">Conferir itens antes de liberar</footer>
         </>

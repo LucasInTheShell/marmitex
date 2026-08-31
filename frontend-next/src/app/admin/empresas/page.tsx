@@ -4,6 +4,7 @@ import { sessionToken } from "@/lib/session";
 import type { CompanyWithAccess } from "@/lib/types";
 
 import { NewCompanyForm } from "./form";
+import { CompanySchedules } from "./schedules";
 
 export default async function CompaniesPage() {
   await requireRole("admin");
@@ -28,14 +29,20 @@ export default async function CompaniesPage() {
             {companies.map((company) => (
               <li
                 key={company.id}
-                className="flex items-center justify-between px-5 py-3"
+                className="px-5 py-4"
               >
-                <span className="font-medium text-stone-800">
-                  {company.name}
-                </span>
-                <span className="text-sm text-stone-500">
-                  {company.access_email}
-                </span>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-medium text-stone-800">
+                    {company.name}
+                  </span>
+                  <span className="text-sm text-stone-500">
+                    {company.access_email}
+                  </span>
+                </div>
+                <CompanySchedules
+                  companyId={company.id}
+                  schedules={company.meal_schedules}
+                />
               </li>
             ))}
           </ul>

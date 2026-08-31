@@ -15,8 +15,14 @@ seguindo o `README.md` e permanecem como fonte de verdade.
 - As roles `admin`, `company` e `kitchen` já existem e têm proteção real na API
   e nas páginas.
 - A conta `company` já é vinculada a uma empresa.
-- A tabela `orders` já registra empresa, funcionário, prato, tamanho, data e
-  estado de produção.
+- Cada empresa possui de um a oito horários de refeição, cada um com seus dias
+  da semana, e o Admin pode mantê-los no cadastro da empresa.
+- A antecedência global de corte fica em `operational_settings`, é editável no
+  painel Admin e começa em 90 minutos; não é variável de ambiente.
+- O módulo `orders` já registra pedidos multi-item, snapshots do funcionário,
+  cardápio/horário, preços, cutoff, cancelamento e estado de produção. A API
+  atual cria pedidos por `CompanyAccount`; a futura role Employee deve
+  reutilizar o caso de uso sem aceitar `company_id` do cliente.
 - O frontend nunca deve receber `DATABASE_URL`, hashes de senha ou acesso
   direto às tabelas.
 
@@ -121,12 +127,22 @@ consultas operacionais. Validar tamanho e formato no FastAPI.
 
 ## 6. Pedidos Employee
 
+<<<<<<< HEAD
 Criar endpoint autenticado para envio do pedido, reaproveitando o módulo
 `orders`:
+=======
+Autorizar a futura role Employee no fluxo de envio, reaproveitando o caso de uso
+multi-item já implementado em `orders`:
+>>>>>>> 48bf61c (pedidos, visualização e gerenciamento finalizado na API)
 
 - derivar `company_id` da sessão Employee;
 - validar que o item pertence a um cardápio publicado e disponível na data;
 - aplicar horário limite configurado;
+<<<<<<< HEAD
+=======
+- exigir o `meal_schedule_id`, validar que pertence à empresa e que atende o dia
+  solicitado, e calcular `scheduled_for` e `cutoff_at` no servidor;
+>>>>>>> 48bf61c (pedidos, visualização e gerenciamento finalizado na API)
 - aceitar tamanho permitido pelo prato;
 - adicionar `quantity` com mínimo 1 e limite de negócio;
 - adicionar `notes` opcional com limite de caracteres;
@@ -143,16 +159,40 @@ Contrato de criação esperado:
   "employee_name": "Maria da Silva",
   "employee_department": "Financeiro",
   "employee_internal_id": "1042",
+<<<<<<< HEAD
   "menu_item_id": "uuid",
   "date": "2026-08-28",
   "size": "M",
   "quantity": 1,
   "notes": "Sem cebola"
+=======
+  "meal_schedule_id": "uuid",
+  "date": "2026-08-28",
+  "items": [
+    {
+      "menu_item_id": "uuid",
+      "size": "M",
+      "quantity": 1,
+      "notes": "Sem cebola"
+    }
+  ]
+>>>>>>> 48bf61c (pedidos, visualização e gerenciamento finalizado na API)
 }
 ```
 
 ## 7. Cardápio do Employee
 
+<<<<<<< HEAD
+=======
+Para a role `company`, a leitura equivalente já foi implementada em
+`GET /api/v1/menus/available`. Ela retorna somente menus publicados, expande os
+pratos na ordem administrativa e devolve, por data, somente os horários da
+empresa cujo cutoff ainda não passou. Cada horário inclui `id`, `label`,
+`meal_time`, `scheduled_for` e `cutoff_at`. Um cardápio sem nenhum horário aberto
+não é retornado. A role Employee ainda deverá receber autorização própria ou um
+endpoint equivalente quando for implementada.
+
+>>>>>>> 48bf61c (pedidos, visualização e gerenciamento finalizado na API)
 Disponibilizar leitura autenticada dos cardápios publicados para a role
 Employee. A resposta precisa conter somente campos públicos:
 
@@ -173,6 +213,10 @@ permissão de leitura.
 | Listar todos os acessos Employee | Sim | Não | Não | Não |
 | Gerenciar Employee de uma empresa | Sim | Somente a própria | Não | Não |
 | Ler cardápio publicado | Conforme fluxo admin | Conforme fluxo atual | Sim | Conforme necessidade operacional |
+<<<<<<< HEAD
+=======
+| Criar pedido pelo painel Company | Não | Somente própria empresa | Não | Não |
+>>>>>>> 48bf61c (pedidos, visualização e gerenciamento finalizado na API)
 | Criar pedido Employee | Não | Não | Somente própria empresa | Não |
 | Acompanhar produção | Conforme regras atuais | Somente própria empresa | Somente confirmação própria | Sim |
 
@@ -291,6 +335,15 @@ todos os campos necessários aos cards:
 GET /api/v1/kitchen/production-board?date=YYYY-MM-DD
 ```
 
+<<<<<<< HEAD
+=======
+O slice `orders` também disponibiliza
+`GET /api/v1/kitchen/production-summary?date=YYYY-MM-DD`, que soma pedidos não
+cancelados por horário real de almoço, prato e tamanho. Esse contrato atende a
+visão de preparação (por exemplo, total de parmegianas às 11:00) sem exigir que
+o frontend baixe CPF/telefone ou refaça os agrupamentos.
+
+>>>>>>> 48bf61c (pedidos, visualização e gerenciamento finalizado na API)
 Cada pedido deve fornecer identificador/número operacional, funcionário,
 empresa, prato, tamanho, quantidade, observações, horário de entrada, estado e
 instante da última mudança de estado.
