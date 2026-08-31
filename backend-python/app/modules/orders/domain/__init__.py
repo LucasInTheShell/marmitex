@@ -1,2 +1,1 @@
 """Orders domain."""
-

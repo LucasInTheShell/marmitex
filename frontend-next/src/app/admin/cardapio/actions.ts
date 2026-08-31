@@ -5,11 +5,11 @@ import { revalidatePath } from "next/cache";
 import { ApiError, apiRequest } from "@/lib/api/client";
 import { requireRole } from "@/lib/auth";
 import { sessionToken } from "@/lib/session";
-import { businessDaysOfWeek } from "@/lib/week";
+import { calendarDaysOfWeek } from "@/lib/week";
 
 export type MenuFormState = { error?: string; success?: string };
 
-/** Reads the checkbox group named `dia-<date>` for each business day. */
+/** Reads the checkbox group named `dia-<date>` for each calendar day. */
 function selectionsFrom(formData: FormData, days: string[]) {
   return days.map((date) => ({
     date,
@@ -26,7 +26,7 @@ export async function saveWeekMenu(
   const weekStart = String(formData.get("weekStart") ?? "");
   if (!weekStart) return { error: "Semana inválida." };
 
-  const days = businessDaysOfWeek(weekStart);
+  const days = calendarDaysOfWeek(weekStart);
   try {
     await apiRequest("/api/v1/menus/week", {
       method: "PUT",
@@ -59,7 +59,7 @@ export async function publishWeekMenu(
   const weekStart = String(formData.get("weekStart") ?? "");
   if (!weekStart) return { error: "Semana inválida." };
 
-  const days = businessDaysOfWeek(weekStart);
+  const days = calendarDaysOfWeek(weekStart);
   try {
     await apiRequest("/api/v1/menus/week/publish", {
       method: "POST",
@@ -79,5 +79,6 @@ export async function publishWeekMenu(
   }
 
   revalidatePath("/admin/cardapio");
+  revalidatePath("/empresa");
   return { success: "Cardápio publicado." };
 }

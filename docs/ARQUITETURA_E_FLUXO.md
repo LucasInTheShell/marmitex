@@ -8,10 +8,12 @@ PostgreSQL.
 Para uma leitura bloco por bloco de uma requisição real, consulte também
 [`FLUXO_CORE_AUTH.md`](./FLUXO_CORE_AUTH.md).
 
-> Importante: esta é uma fotografia do código atual. `auth`, `companies` e
-> `menus` possuem fluxos HTTP implementados. `orders` está apenas parcialmente
-> implementado, e `employees` e `kitchen` ainda contêm somente a estrutura de
-> pacotes.
+> Importante: esta é uma fotografia do código atual. `auth`, `companies`,
+> `menus`, `operations` e `orders` possuem fluxos HTTP implementados. `orders`
+> ainda depende da integração das telas Next.js e dos recursos futuros de
+> impressão/tempo real. `employees` e o módulo independente `kitchen` ainda
+> contêm somente a estrutura de pacotes; o board atual pertence ao slice de
+> `orders`.
 
 ## 1. Visão geral
 
@@ -544,22 +546,30 @@ O endpoint POST remove espaços nas pontas do nome e devolve status 201.
 
 ### `domain`
 
-- `entities.py`: define `MenuItem` e `Menu` como dataclasses imutáveis.
+- `entities.py`: define `MenuItem`, `Menu` administrativo e `AvailableMenu`
+  público como dataclasses.
 - `repositories.py`: port para listar/criar pratos, consultar intervalo, salvar
-  semana e publicar datas.
-- `exceptions.py`: `EmptyMenuError` retorna 422 quando nenhuma data preenchida
-  pode ser publicada.
+  semana, publicar datas e carregar cardápios publicados com pratos completos.
+- `exceptions.py`: `EmptyMenuError` trata publicação vazia e
+  `InvalidMenuPeriodError` rejeita períodos invertidos.
 
 ### `application/services.py`
 
-`MenuApplicationService` coordena os cinco casos de uso. A regra adicional está
-em `publish`: se o repositório atualizar zero cardápios, lança `EmptyMenuError`.
+`MenuApplicationService` também coordena a disponibilidade para uma empresa.
+Ele elimina datas passadas, exige um horário ativo da empresa no dia e, para o
+dia atual, mantém o menu somente enquanto pelo menos um horário ainda estiver
+antes de seu cutoff. A resposta carrega somente esses horários abertos, com os
+instantes `scheduled_for` e `cutoff_at` calculados pelo backend. A antecedência
+vem de `operational_settings` e o cálculo usa `APP_TIME_ZONE`.
 
 ### `infrastructure`
 
 - `models.py`: usa `Menu(**row)` e `MenuItem(**row)` porque nomes das colunas e
   campos das entidades coincidem.
 - `repository.py`: contém SQL de pratos e cardápios.
+- `published_between` filtra `published = true`, expande `menu_item_ids` com
+  `unnest(... with ordinality)` e junta `menu_items`; a ordinalidade preserva a
+  ordem escolhida pelo Admin sem expor o array interno à empresa.
 - `save_week` faz upsert por data dentro de uma transação. Se a seleção de
   pratos mudou, `published` volta para `false`; se não mudou, preserva o estado.
 - `publish` só publica linhas cuja lista `menu_item_ids` não esteja vazia e
@@ -567,36 +577,38 @@ em `publish`: se o repositório atualizar zero cardápios, lança `EmptyMenuErro
 
 ### `api`
 
-- `dependencies.py`: monta serviço e repositório.
+- `dependencies.py`: compõe os repositórios de menu, empresa e configuração
+  operacional na mesma conexão da requisição.
 - `schemas.py`: valida tamanhos literais `P`, `M`, `G`, preço não negativo,
   listas de 1 a 7 dias e contratos de resposta.
-- `router.py`: publica as rotas de pratos e cardápios, todas restritas a admin
-  no estado atual.
+- `router.py`: mantém escrita e leitura administrativa restritas a Admin e
+  publica `GET /menus/available` exclusivamente para `CompanyAccount`.
 
-## 10. Módulos ainda incompletos
+## 10. Orders implementado e módulos ainda incompletos
 
 ### `orders`
 
-O módulo já tem parte do domínio e persistência, mas ainda não entrega um caso
-de uso HTTP:
+O módulo entrega criação multi-item, consultas, cancelamento, painel operacional
+e avanço de produção. O detalhamento completo está em
+[`FLUXO_ORDERS.md`](./FLUXO_ORDERS.md).
 
 | Arquivo | Estado atual |
 |---|---|
-| `api/router.py` | Cria router `/orders`, sem endpoints. |
-| `api/schemas.py` | Apenas docstring reservando os contratos HTTP. |
-| `application/create_order.py` | Apenas documentação da fronteira futura. |
-| `application/cancel_order.py` | Apenas documentação; cancelamento está fora da v1 atual. |
-| `application/services.py` | Apenas docstring. |
-| `domain/entities.py` | Define `ProductionStatus` e a entidade `Order`. |
-| `domain/exceptions.py` | Declara a base `OrderDomainError`. |
-| `domain/repositories.py` | Declara somente `by_id`. |
-| `domain/rules.py` | Define tamanhos válidos e normalização de CPF para dígitos. |
-| `infrastructure/models.py` | Converte row em `Order`. |
-| `infrastructure/repository.py` | Implementa apenas busca de pedido por ID. |
+| `api/router.py` | Expõe criação, consulta, cancelamento, produção e board Kitchen. |
+| `api/schemas.py` | Valida o pedido multi-item e define respostas completas/sanitizadas. |
+| `application/create_order.py` | Revalida empresa, menu, horário, cutoff, tamanhos, preços e idempotência. |
+| `application/cancel_order.py` | Cancela pedido próprio pendente antes do cutoff. |
+| `application/services.py` | Lista, detalha e controla transições de produção. |
+| `domain/entities.py` | Define o agregado `Order`, seus itens, drafts e estados. |
+| `domain/exceptions.py` | Define erros estáveis de negócio. |
+| `domain/repositories.py` | Define o port completo de persistência. |
+| `domain/rules.py` | Centraliza limites e normalização de CPF/telefone. |
+| `infrastructure/models.py` | Converte cabeçalho e linhas no agregado. |
+| `infrastructure/repository.py` | Implementa transação, filtros, locks e hidratação dos itens. |
 
-Consequência prática: embora existam tabela `orders`, router incluído e algumas
-classes, nenhuma requisição de criação, listagem, produção ou impressão de
-pedido está disponível nesta branch.
+O frontend ainda usa dados demonstrativos para confirmar e exibir pedidos; a
+integração das telas é uma etapa separada. Impressão autoritativa também não faz
+parte deste slice.
 
 ### `employees`
 
@@ -607,8 +619,9 @@ pertencem ao pedido.
 
 ### `kitchen`
 
-Também contém apenas a estrutura de pacotes. Ainda não existem endpoints para
-painel da cozinha, agrupamento por empresa, status de produção ou impressão.
+O pacote independente ainda contém apenas a estrutura. O slice `orders` já
+expõe o board diário sanitizado e a mudança de status para Kitchen; agrupamentos
+avançados, impressão autoritativa e tempo real continuam pendentes.
 
 ### Arquivos `__init__.py`
 
@@ -631,10 +644,18 @@ Todas as rotas de negócio recebem o prefixo `/api/v1`.
 | `GET /api/v1/menu-items` | admin | Lista pratos. |
 | `POST /api/v1/menu-items` | admin | Cria prato; resposta 201. |
 | `GET /api/v1/menus?start=...&end=...` | admin | Lista cardápios no intervalo. |
+| `GET /api/v1/menus/available?start=...&end=...` | company | Lista somente cardápios publicados e ainda disponíveis, com pratos completos. |
 | `PUT /api/v1/menus/week` | admin | Salva/upserta os dias; resposta 204. |
 | `POST /api/v1/menus/week/publish` | admin | Publica dias preenchidos; resposta 204. |
+| `POST /api/v1/orders` | company | Cria pedido multi-item para a própria empresa. |
+| `GET /api/v1/orders?start=...&end=...` | company/admin | Lista pedidos dentro do escopo autorizado. |
+| `GET /api/v1/orders/{id}` | company/admin | Exibe o pedido completo dentro do escopo. |
+| `POST /api/v1/orders/{id}/cancel` | company | Cancela pedido próprio pendente antes do cutoff. |
+| `PATCH /api/v1/orders/{id}/status` | kitchen/admin | Avança o estado de produção. |
+| `GET /api/v1/kitchen/production-board?date=...` | kitchen | Lista pedidos ativos sem CPF/telefone. |
+| `GET /api/v1/kitchen/production-summary?date=...` | kitchen | Agrupa quantidades por horário, prato e tamanho. |
 
-Não há endpoint `/orders` funcional apesar de o prefixo estar registrado.
+Os contratos e exemplos de `orders` estão em `docs/FLUXO_ORDERS.md`.
 
 ### Exemplos de requisição direta à API
 
@@ -842,6 +863,8 @@ O token não precisa ser colocado no estado React nem devolvido ao código clien
 | `admin/cardapio/page.tsx` | Calcula semana, busca pratos e menus em paralelo. |
 | `admin/cardapio/form.tsx` | Checkboxes por dia, ações de salvar e publicar. |
 | `admin/cardapio/actions.ts` | Monta payload semanal, salva/publica e revalida. |
+| `empresa/page.tsx` | Busca empresa, cutoff e cardápios disponíveis em paralelo. |
+| `empresa/panel.tsx` | Exibe datas e pratos publicados e usa a seleção no pedido demonstrativo. |
 
 ### `src/lib`
 
@@ -853,7 +876,7 @@ O token não precisa ser colocado no estado React nem devolvido ao código clien
 | `session.ts` | Cookie HTTP-only. |
 | `types.ts` | Espelho TypeScript dos contratos públicos da API. |
 | `week.ts` | Cálculos de data sem deslocamento de fuso e labels pt-BR. |
-| `week.test.ts` | Testa viradas de data, dias úteis, domingo, fuso e labels. |
+| `week.test.ts` | Testa viradas de data, semana completa de segunda a domingo, dias úteis, fuso e labels. |
 
 ### `e2e`
 
@@ -920,17 +943,22 @@ do banco só porque o formulário já impede determinado valor.
 
 ## 18. Limites e pontos de atenção do estado atual
 
-1. **A v1 funcional ainda está incompleta.** Não existem criação de pedidos,
-   menu publicado para empresa, painel de cozinha ou etiquetas.
-2. **`ORDER_CUTOFF_TIME` e `APP_TIME_ZONE` existem apenas no frontend atual.**
-   Como pedidos ainda não foram implementados, a regra de corte ainda não é
-   aplicada autoritativamente pelo FastAPI. Ao implementar pedidos, o backend
-   também deverá receber e validar essa regra; frontend não é fronteira de
-   segurança.
-3. **Somente admin tem home pronta.** `company` e `kitchen` autenticam no
-   backend, mas `homePathFor` os redireciona para `/login`.
-4. **As rotas de menu são somente de admin.** Ainda falta uma consulta
-   protegida para empresa que exponha apenas menus publicados.
+1. **A v1 funcional ainda está incompleta no frontend.** Leitura de cardápios,
+   criação persistente, consultas, cancelamento e produção já existem na API,
+   mas os painéis ainda precisam substituir os pedidos demonstrativos por esses
+   endpoints. Impressão autoritativa ainda não existe.
+2. **A base do cutoff já pertence ao backend.** `operational_settings` guarda a
+   antecedência global editável pelo Admin (90 minutos inicialmente), enquanto
+   `company_meal_schedules` guarda os vários horários e dias atendidos por cada
+   empresa. `operations/domain/cutoff.py` calcula o instante limite usando
+   `APP_TIME_ZONE`. `CreateOrder` recalcula e rejeita autoritativamente no
+   instante da confirmação; frontend não é fronteira de segurança.
+3. **A home Company já consome dados reais de empresa, horários, cutoff e
+   cardápios.** A confirmação ainda usa armazenamento demonstrativo, embora o
+   endpoint `POST /orders` já esteja disponível para a próxima integração.
+4. **A leitura pública operacional é deliberadamente restrita.** Somente
+   `CompanyAccount` acessa `/menus/available`; rascunhos e a estrutura
+   administrativa continuam disponíveis apenas para Admin.
 5. **Os tipos TypeScript são espelhos manuais.** O backend continua sendo a
    fonte da verdade; mudanças de schema precisam atualizar `types.ts` e testes.
 6. **A migration inicial só roda automaticamente em volume novo do Docker.**

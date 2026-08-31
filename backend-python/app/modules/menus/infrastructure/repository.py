@@ -4,7 +4,7 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 
-from app.modules.menus.domain.entities import Menu, MenuItem
+from app.modules.menus.domain.entities import AvailableMenu, Menu, MenuItem
 from app.modules.menus.infrastructure.models import menu_from_row, menu_item_from_row
 
 
@@ -46,6 +46,39 @@ class PostgresMenuRepository:
             (start, end),
         )
         return [menu_from_row(row) for row in await result.fetchall()]
+
+    async def published_between(
+        self, start: date, end: date
+    ) -> list[AvailableMenu]:
+        result = await self.connection.execute(
+            """
+            select
+                m.date,
+                mi.id,
+                mi.name,
+                mi.description,
+                mi.size_options,
+                mi.price
+            from menus m
+            cross join lateral unnest(m.menu_item_ids)
+                with ordinality as selected(item_id, position)
+            join menu_items mi on mi.id = selected.item_id
+            where m.published = true
+              and m.date between %s and %s
+            order by m.date, selected.position
+            """,
+            (start, end),
+        )
+        menus: list[AvailableMenu] = []
+        for row in await result.fetchall():
+            if not menus or menus[-1].date != row["date"]:
+                menus.append(
+                    AvailableMenu(
+                        date=row["date"], items=[], available_schedules=[]
+                    )
+                )
+            menus[-1].items.append(menu_item_from_row(row))
+        return menus
 
     async def save_week(self, menus: list[tuple[date, list[UUID]]]) -> None:
         async with self.connection.transaction():

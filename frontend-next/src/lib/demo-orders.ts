@@ -5,6 +5,9 @@ export type DemoOrder = {
   companyId: string;
   companyName: string;
   date: string;
+  mealScheduleId?: string;
+  mealScheduleLabel?: string;
+  mealTime?: string;
   menuItemId: string;
   menuItemName: string;
   size: "P" | "M" | "G";
@@ -82,6 +85,24 @@ export function orderableBusinessDays(count = 5): string[] {
     const weekday = cursor.getDay();
     if (weekday !== 0 && weekday !== 6) days.push(localIsoDate(cursor));
     cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
+export function upcomingServiceDays(
+  weekdays: number[],
+  count = 7,
+): string[] {
+  const days: string[] = [];
+  let cursor = new Date();
+  let inspectedDays = 0;
+
+  while (days.length < count && inspectedDays < count * 7 + 7) {
+    const weekday = cursor.getDay() || 7;
+    if (weekdays.includes(weekday)) days.push(localIsoDate(cursor));
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+    inspectedDays += 1;
   }
 
   return days;

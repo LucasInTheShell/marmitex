@@ -7,8 +7,8 @@ import { sessionToken } from "@/lib/session";
 import type { Menu, MenuItem } from "@/lib/types";
 import {
   addDays,
-  businessDaysOfWeek,
-  mondayOfWeek,
+  calendarDaysOfWeek,
+  mondayOfCalendarWeek,
   shortDateLabel,
   todayInTimeZone,
 } from "@/lib/week";
@@ -27,14 +27,14 @@ export default async function WeekMenuPage({
   const { semana } = await searchParams;
   const anchor =
     semana && ISO_DATE.test(semana) ? semana : todayInTimeZone(appTimeZone());
-  const weekStart = mondayOfWeek(anchor);
-  const days = businessDaysOfWeek(weekStart);
+  const weekStart = mondayOfCalendarWeek(anchor);
+  const days = calendarDaysOfWeek(weekStart);
 
   const token = await sessionToken();
   const [menuItems, menus] = await Promise.all([
     apiRequest<MenuItem[]>("/api/v1/menu-items", { token }),
     apiRequest<Menu[]>(
-      `/api/v1/menus?start=${encodeURIComponent(days[0])}&end=${encodeURIComponent(days[4])}`,
+      `/api/v1/menus?start=${encodeURIComponent(days[0])}&end=${encodeURIComponent(days[6])}`,
       { token },
     ),
   ]);
@@ -57,7 +57,7 @@ export default async function WeekMenuPage({
             Semana anterior
           </Link>
           <span className="text-stone-500">
-            {shortDateLabel(days[0])} – {shortDateLabel(days[4])}
+            {shortDateLabel(days[0])} – {shortDateLabel(days[6])}
           </span>
           <Link
             href={`/admin/cardapio?semana=${addDays(weekStart, 7)}`}
