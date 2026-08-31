@@ -34,6 +34,7 @@ backend-python/app/
 │   ├── employees/
 │   ├── menus/
 │   ├── orders/
+│   ├── operations/
 │   └── kitchen/
 └── cli/
 
@@ -64,8 +65,17 @@ Suba a stack completa:
 docker compose up --build
 ```
 
-Ou execute os processos separadamente após aplicar
-`migrations/0001_initial.sql` em um PostgreSQL:
+Os scripts de `migrations/` rodam automaticamente apenas quando o volume do
+PostgreSQL é criado. Para um banco local que já possuía a migration `0001`,
+aplique a incremental antes de reconstruir os serviços:
+
+```bash
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0002_operational_cutoff_and_company_meal_schedules.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0003_multi_item_orders.sql
+```
+
+Ou execute os processos separadamente após aplicar, em ordem, todos os arquivos
+SQL de `migrations/` em um PostgreSQL:
 
 ```bash
 cd backend-python
@@ -82,7 +92,7 @@ Crie o primeiro administrador após aplicar a migration:
 
 ```bash
 cd backend-python
-python -m app.cli.create_admin --name "Admin Mavi" --email admin@mavi.local
+python -m app.cli.create_admin --name "Admin Mavi" --email admin@mavi.com.br
 ```
 
 ## Verificações
@@ -101,6 +111,30 @@ npm run build
 
 O E2E exige uma stack isolada já migrada e `E2E_DATABASE_READY=1`; ele não apaga
 automaticamente o banco de desenvolvimento.
+
+## Impressão direta na EPSON TM-T20X
+
+A comanda utiliza papel de 80 mm com área útil de 68 mm. Para imprimir com um
+clique, sem abrir a prévia do navegador:
+
+1. Instale a `EPSON TM-T20X Receipt` no Windows e configure-a como impressora
+   padrão, com papel de 80 mm.
+2. Mantenha a stack em execução em `http://localhost:3000`.
+3. Abra o terminal PowerShell na raiz do projeto e execute:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\iniciar-modo-impressao.ps1
+```
+
+4. No Edge separado que será aberto, faça login na Cozinha uma vez.
+5. Use `Imprimir comanda` ou `Imprimir mapa do dia`. O Edge iniciado pelo script
+   envia `window.print()` diretamente para a impressora padrão.
+
+O script usa um perfil separado em `%LOCALAPPDATA%\MaviConnect\EdgePrintProfile`
+para garantir que a opção de impressão em quiosque seja aplicada mesmo quando
+já existe outra janela do Edge aberta. Feche esse Edge quando não quiser mais
+impressão automática. No navegador aberto normalmente, a prévia continua sendo
+exibida.
 
 ## Supabase em staging e produção
 

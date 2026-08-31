@@ -15,6 +15,10 @@ export default async function CompanyLayout({
       nav={[
         { href: "/empresa#novo-pedido", label: "Novo pedido" },
         { href: "/empresa#pedidos", label: "Pedidos da empresa" },
+        {
+          href: "/empresa/acesso-funcionarios",
+          label: "Acesso dos funcionários",
+        },
       ]}
     >
       {children}

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from app.modules.auth.domain.entities import Account
+from app.modules.auth.domain.entities import Account, AccountRole
 
 
 class AuthRepository(Protocol):
@@ -17,6 +17,19 @@ class AuthRepository(Protocol):
     async def revoke_session(self, token_hash: str) -> None: ...
 
 
+class AccountManagementRepository(Protocol):
+    async def list_accounts(self) -> list[Account]: ...
+
+    async def create_account(
+        self,
+        name: str,
+        email: str,
+        password_hash: str,
+        role: AccountRole,
+        company_id: UUID | None,
+    ) -> Account: ...
+
+
 class PasswordService(Protocol):
     def hash(self, password: str) -> str: ...
 
@@ -27,4 +40,3 @@ class SessionService(Protocol):
     def create(self) -> str: ...
 
     def hash(self, token: str) -> str: ...
-

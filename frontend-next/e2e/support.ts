@@ -2,14 +2,14 @@ import { expect, type Page } from "@playwright/test";
 
 /** Credentials provisioned in the isolated E2E PostgreSQL database. */
 export const ADMIN = {
-  email: "admin@mavi.local",
+  email: "admin@mavi.com.br",
   password: "mavi-admin-2026",
 };
 
 /** The company the critical path creates and then orders as. */
 export const COMPANY = {
   name: "Acme Ltda",
-  email: "acme@empresa.local",
+  email: "acme@empresa.com.br",
   password: "acme-2026-senha",
 };
 

@@ -13,6 +13,11 @@ def test_composition_root_exposes_the_frontend_contracts() -> None:
 
     assert "/api/v1/auth/login" in paths
     assert "/api/v1/auth/me" in paths
+    assert "/api/v1/accounts" in paths
     assert "/api/v1/companies" in paths
+    assert "/api/v1/companies/me" in paths
+    assert "/api/v1/companies/{company_id}/meal-schedules" in paths
     assert "/api/v1/menu-items" in paths
     assert "/api/v1/menus/week" in paths
+    assert "/api/v1/menus/available" in paths
+    assert "/api/v1/operational-settings" in paths

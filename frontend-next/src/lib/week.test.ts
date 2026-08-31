@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   businessDaysOfWeek,
+  calendarDaysOfWeek,
   isBusinessDay,
+  mondayOfCalendarWeek,
   mondayOfWeek,
   shortDateLabel,
   todayInTimeZone,
@@ -22,6 +24,24 @@ describe("addDays", () => {
     // must not shift regardless of where the app runs.
     expect(addDays("2026-11-01", 1)).toBe("2026-11-02");
     expect(addDays("2026-03-08", 1)).toBe("2026-03-09");
+  });
+});
+
+describe("calendar week", () => {
+  it("treats Sunday as the last day of the current calendar week", () => {
+    expect(mondayOfCalendarWeek("2026-08-09")).toBe("2026-08-03");
+  });
+
+  it("returns Monday through Sunday for menu publishing", () => {
+    expect(calendarDaysOfWeek("2026-08-06")).toEqual([
+      "2026-08-03",
+      "2026-08-04",
+      "2026-08-05",
+      "2026-08-06",
+      "2026-08-07",
+      "2026-08-08",
+      "2026-08-09",
+    ]);
   });
 });
 

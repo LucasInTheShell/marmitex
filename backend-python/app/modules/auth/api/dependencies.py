@@ -5,7 +5,10 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.dependencies import DatabaseConnection
 from app.core.security import bearer, bearer_token
-from app.modules.auth.application.services import AuthApplicationService
+from app.modules.auth.application.services import (
+    AccountManagementService,
+    AuthApplicationService,
+)
 from app.modules.auth.domain.entities import Account, AccountRole
 from app.modules.auth.domain.exceptions import ForbiddenError, UnauthorizedError
 from app.modules.auth.infrastructure.password import ArgonPasswordService
@@ -29,6 +32,20 @@ def auth_service(
 AuthServiceDependency = Annotated[AuthApplicationService, Depends(auth_service)]
 
 
+def account_management_service(
+    connection: DatabaseConnection,
+) -> AccountManagementService:
+    return AccountManagementService(
+        PostgresAuthRepository(connection),
+        ArgonPasswordService(),
+    )
+
+
+AccountManagementServiceDependency = Annotated[
+    AccountManagementService, Depends(account_management_service)
+]
+
+
 async def current_account(
     credentials: Credentials, service: AuthServiceDependency
 ) -> Account:
@@ -47,5 +64,18 @@ async def admin_account(account: CurrentAccount) -> Account:
     return account
 
 
-AdminAccount = Annotated[Account, Depends(admin_account)]
+async def kitchen_account(account: CurrentAccount) -> Account:
+    if account.role is not AccountRole.KITCHEN:
+        raise ForbiddenError()
+    return account
 
+
+async def company_account(account: CurrentAccount) -> Account:
+    if account.role is not AccountRole.COMPANY:
+        raise ForbiddenError()
+    return account
+
+
+AdminAccount = Annotated[Account, Depends(admin_account)]
+KitchenAccount = Annotated[Account, Depends(kitchen_account)]
+CompanyAccount = Annotated[Account, Depends(company_account)]

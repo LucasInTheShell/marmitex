@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-mavi}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mavi}
     ports:
-      - "5434:5434"
+      - "5434:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro
@@ -21,6 +21,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://mavi:mavi@database:5432/mavi_connect}
       CORS_ORIGINS: '["http://localhost:3000"]'
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-America/Sao_Paulo}
     ports:
       - "8000:8000"
     depends_on:
@@ -31,7 +32,6 @@ services:
     build: ./frontend-next
     environment:
       API_URL: ${API_URL:-http://api:8000}
-      ORDER_CUTOFF_TIME: ${ORDER_CUTOFF_TIME:-10:00}
       APP_TIME_ZONE: ${APP_TIME_ZONE:-America/Sao_Paulo}
     ports:
       - "3000:3000"

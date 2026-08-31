@@ -8,7 +8,7 @@ import {
 } from "@/lib/demo-orders";
 import type { ProductionStatus } from "@/lib/types";
 
-const STORAGE_KEY = "mavi-connect-demo-orders-v1";
+const STORAGE_KEY = "mavi-connect-demo-orders-v2";
 
 function readStoredOrders(): DemoOrder[] | null {
   try {

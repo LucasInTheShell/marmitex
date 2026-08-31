@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  businessDaysOfWeek,
+  calendarDaysOfWeek,
   todayInTimeZone,
   weekdayLabel,
 } from "../src/lib/week";
@@ -9,7 +9,7 @@ import {
 import { ADMIN, COMPANY, DISH, signIn } from "./support";
 
 const TIME_ZONE = process.env.APP_TIME_ZONE ?? "America/Sao_Paulo";
-const WEEK = businessDaysOfWeek(todayInTimeZone(TIME_ZONE));
+const WEEK = calendarDaysOfWeek(todayInTimeZone(TIME_ZONE));
 
 /**
  * The critical path of CLAUDE.md §8. It grows one step per vertical slice;
@@ -45,7 +45,7 @@ test("admin cadastra empresa, prato e publica o cardápio da semana", async ({
     ).toContainText("P · M · G");
   });
 
-  await test.step("monta o cardápio dos cinco dias úteis", async () => {
+  await test.step("monta o cardápio de segunda a domingo", async () => {
     await page.getByRole("link", { name: "Cardápio da semana" }).click();
 
     for (const date of WEEK) {

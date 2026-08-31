@@ -2,8 +2,13 @@ from datetime import datetime
 from uuid import UUID
 
 from psycopg import AsyncConnection
+from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
-from app.modules.auth.domain.entities import Account
+from app.modules.auth.domain.entities import Account, AccountRole
+from app.modules.auth.domain.exceptions import (
+    DuplicateAccountEmailError,
+    InvalidAccountCompanyError,
+)
 from app.modules.auth.infrastructure.models import account_from_row
 
 
@@ -56,3 +61,45 @@ class PostgresAuthRepository:
             (token_hash,),
         )
 
+    async def list_accounts(self) -> list[Account]:
+        result = await self.connection.execute(
+            """
+            select id, name, email, company_id, role
+            from accounts
+            order by role, name, email
+            """
+        )
+        return [account_from_row(row) for row in await result.fetchall()]
+
+    async def create_account(
+        self,
+        name: str,
+        email: str,
+        password_hash: str,
+        role: AccountRole,
+        company_id: UUID | None,
+    ) -> Account:
+        if company_id is not None:
+            company_result = await self.connection.execute(
+                "select id from companies where id = %s and active",
+                (company_id,),
+            )
+            if not await company_result.fetchone():
+                raise InvalidAccountCompanyError()
+
+        try:
+            result = await self.connection.execute(
+                """
+                insert into accounts (name, email, password_hash, company_id, role)
+                values (%s, %s, %s, %s, %s)
+                returning id, name, email, company_id, role
+                """,
+                (name, email, password_hash, company_id, role.value),
+            )
+            row = await result.fetchone()
+        except UniqueViolation as error:
+            raise DuplicateAccountEmailError from error
+        except ForeignKeyViolation as error:
+            raise InvalidAccountCompanyError from error
+
+        return account_from_row(row)

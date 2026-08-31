@@ -10,3 +10,103 @@ body {
     Arial,
     sans-serif;
 }
+
+.thermal-print-document {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 3mm 6mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .thermal-print-document,
+  .thermal-print-document * {
+    visibility: visible !important;
+  }
+
+  .thermal-print-document {
+    display: block !important;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 68mm;
+    color: #000;
+    background: #fff;
+    font-family: "Courier New", monospace;
+    font-size: 9pt;
+    line-height: 1.2;
+  }
+
+  .thermal-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-bottom: 1px dashed #000;
+    padding-bottom: 2mm;
+    text-align: center;
+  }
+
+  .thermal-header strong {
+    font-size: 14pt;
+  }
+
+  .thermal-date {
+    margin: 2mm 0;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .thermal-order {
+    border-block: 2px solid #000;
+    padding: 2mm 0;
+  }
+
+  .thermal-order--compact {
+    border-top: 1px dashed #000;
+    border-bottom: 0;
+  }
+
+  .thermal-order p {
+    margin: 1mm 0;
+  }
+
+  .thermal-order__heading,
+  .thermal-order__dish {
+    display: flex;
+    justify-content: space-between;
+    gap: 3mm;
+  }
+
+  .thermal-order__employee {
+    margin-top: 2mm !important;
+    font-size: 12pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .thermal-order__dish {
+    margin-top: 2mm;
+    border-top: 1px dashed #000;
+    padding-top: 2mm;
+    font-size: 11pt;
+  }
+
+  .thermal-order__notes {
+    margin-top: 2mm !important;
+    border: 2px solid #000;
+    padding: 2mm;
+    font-size: 10pt;
+  }
+
+  .thermal-footer {
+    border-top: 1px dashed #000;
+    margin-top: 3mm;
+    padding-top: 2mm;
+    text-align: center;
+  }
+}

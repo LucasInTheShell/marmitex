@@ -14,6 +14,7 @@ export default async function KitchenLayout({
       areaLabel="Operação da cozinha"
       nav={[
         { href: "/cozinha", label: "Fila de produção" },
+        { href: "/cozinha/modo-tv", label: "Modo TV" },
       ]}
     >
       {children}

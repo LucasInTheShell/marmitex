@@ -5,6 +5,9 @@ export type DemoOrder = {
   companyId: string;
   companyName: string;
   date: string;
+  mealScheduleId?: string;
+  mealScheduleLabel?: string;
+  mealTime?: string;
   menuItemId: string;
   menuItemName: string;
   size: "P" | "M" | "G";
@@ -12,6 +15,8 @@ export type DemoOrder = {
   employeePhone: string;
   employeeDepartment: string;
   employeeCpf: string;
+  quantity: number;
+  notes: string;
   productionStatus: ProductionStatus;
   createdAt: string;
 };
@@ -85,6 +90,24 @@ export function orderableBusinessDays(count = 5): string[] {
   return days;
 }
 
+export function upcomingServiceDays(
+  weekdays: number[],
+  count = 7,
+): string[] {
+  const days: string[] = [];
+  let cursor = new Date();
+  let inspectedDays = 0;
+
+  while (days.length < count && inspectedDays < count * 7 + 7) {
+    const weekday = cursor.getDay() || 7;
+    if (weekdays.includes(weekday)) days.push(localIsoDate(cursor));
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+    inspectedDays += 1;
+  }
+
+  return days;
+}
+
 export function formatOrderDate(date: string, long = false): string {
   return new Intl.DateTimeFormat("pt-BR", {
     weekday: long ? "long" : undefined,
@@ -100,6 +123,8 @@ export function createDemoOrders(currentCompany?: {
   const today = localIsoDate();
   const tomorrow = addCalendarDays(today, 1);
   const company = currentCompany ?? { id: "acme", name: "Acme Tecnologia" };
+  const minutesAgo = (minutes: number) =>
+    new Date(Date.now() - minutes * 60_000).toISOString();
 
   return [
     {
@@ -114,8 +139,10 @@ export function createDemoOrders(currentCompany?: {
       employeePhone: "11988776655",
       employeeDepartment: "Financeiro",
       employeeCpf: "12345678901",
+      quantity: 2,
+      notes: "Sem cebola em uma unidade.",
       productionStatus: "pending",
-      createdAt: `${today}T08:14:00-03:00`,
+      createdAt: minutesAgo(8),
     },
     {
       id: "demo-002",
@@ -129,8 +156,10 @@ export function createDemoOrders(currentCompany?: {
       employeePhone: "11977885544",
       employeeDepartment: "Produto",
       employeeCpf: "23456789012",
+      quantity: 1,
+      notes: "",
       productionStatus: "printed",
-      createdAt: `${today}T08:21:00-03:00`,
+      createdAt: minutesAgo(22),
     },
     {
       id: "demo-003",
@@ -144,8 +173,10 @@ export function createDemoOrders(currentCompany?: {
       employeePhone: "11966774433",
       employeeDepartment: "Fiscal",
       employeeCpf: "34567890123",
+      quantity: 3,
+      notes: "Enviar talheres descartáveis.",
       productionStatus: "separated",
-      createdAt: `${today}T08:37:00-03:00`,
+      createdAt: minutesAgo(38),
     },
     {
       id: "demo-004",
@@ -159,8 +190,10 @@ export function createDemoOrders(currentCompany?: {
       employeePhone: "11955663322",
       employeeDepartment: "Pessoal",
       employeeCpf: "45678901234",
+      quantity: 1,
+      notes: "Retirar o feijão.",
       productionStatus: "pending",
-      createdAt: `${today}T09:02:00-03:00`,
+      createdAt: minutesAgo(57),
     },
     {
       id: "demo-005",
@@ -174,8 +207,10 @@ export function createDemoOrders(currentCompany?: {
       employeePhone: "11944552211",
       employeeDepartment: "Obras",
       employeeCpf: "56789012345",
+      quantity: 1,
+      notes: "",
       productionStatus: "delivered",
-      createdAt: `${today}T09:16:00-03:00`,
+      createdAt: minutesAgo(70),
     },
     {
       id: "demo-006",
@@ -189,8 +224,10 @@ export function createDemoOrders(currentCompany?: {
       employeePhone: "11933441100",
       employeeDepartment: "Comercial",
       employeeCpf: "67890123456",
+      quantity: 2,
+      notes: "Uma unidade sem salada.",
       productionStatus: "pending",
-      createdAt: `${today}T09:24:00-03:00`,
+      createdAt: minutesAgo(4),
     },
   ];
 }

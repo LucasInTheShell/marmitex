@@ -51,6 +51,19 @@ export function mondayOfWeek(isoDate: string): string {
   return addDays(isoDate, offset);
 }
 
+/** Monday of the calendar week containing the date, including its weekend. */
+export function mondayOfCalendarWeek(isoDate: string): string {
+  const weekday = weekdayOf(isoDate);
+  const isoWeekday = weekday === 0 ? 7 : weekday;
+  return addDays(isoDate, 1 - isoWeekday);
+}
+
+/** The seven calendar days from Monday through Sunday. */
+export function calendarDaysOfWeek(isoDate: string): string[] {
+  const monday = mondayOfCalendarWeek(isoDate);
+  return [0, 1, 2, 3, 4, 5, 6].map((offset) => addDays(monday, offset));
+}
+
 /** The five business days (Mon–Fri) of the week containing the given date. */
 export function businessDaysOfWeek(isoDate: string): string[] {
   const monday = mondayOfWeek(isoDate);
