@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useOptimistic, useState, useTransition, type FormEvent } from "react";
 
 import { cancelOrderAction, createOrderAction } from "@/app/empresa/actions";
@@ -14,6 +15,7 @@ import {
 import type {
   AvailableMenu,
   MealSchedule,
+  MenuItemImage,
   Order,
   ProductionStatus,
   SizeOption,
@@ -251,11 +253,15 @@ export function CompanyPanel({
                 {selectedMenu?.items.length ? selectedMenu.items.map((item) => (
                   <label key={item.id} className={`flex cursor-pointer items-start gap-3 px-4 py-4 ${selectedDish?.id === item.id ? "bg-emerald-50/70" : "hover:bg-stone-50"}`}>
                     <input type="radio" name="menuItem" checked={selectedDish?.id === item.id} onChange={() => { setSelectedMenuItem(item.id); setSelectedSize(item.size_options[0]); }} className="mt-1 accent-[#216450]" />
+                    {item.image_url ? <Image src={item.image_url} alt="" width={72} height={54} className="h-[54px] w-[72px] rounded-md object-cover" /> : null}
                     <span className="min-w-0 flex-1"><strong className="block text-sm text-stone-900">{item.name}</strong><span className="mt-1 block text-sm text-stone-500">{item.description}</span></span>
                     <strong className="text-sm">{item.price === null ? "Sem preço" : CURRENCY.format(item.price)}</strong>
                   </label>
                 )) : <p className="px-4 py-8 text-center text-sm text-stone-500">Nenhum cardápio publicado com horário disponível.</p>}
               </div>
+              {selectedDish?.images.length ? (
+                <DishCarousel key={selectedDish.id} name={selectedDish.name} images={selectedDish.images} />
+              ) : null}
               <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_120px]">
                 <fieldset>
                   <legend className="text-sm font-medium text-stone-700">Tamanho</legend>
@@ -340,4 +346,36 @@ function Metric({ label, value, tone = "text-stone-900", last = false }: { label
 
 function Field({ name, label, required = true, ...inputProps }: { name: string; label: string; required?: boolean; autoComplete?: string; inputMode?: "text" | "tel" | "numeric" }) {
   return <label className="text-sm font-medium text-stone-700">{label}<input name={name} required={required} {...inputProps} className="mt-1.5 w-full rounded-md border border-stone-300 px-3 py-2.5 outline-none focus:border-[#34725f] focus:ring-2 focus:ring-emerald-100" /></label>;
+}
+
+function DishCarousel({ name, images }: { name: string; images: MenuItemImage[] }) {
+  const ordered = [...images].sort((left, right) => left.sort_order - right.sort_order);
+  const initialIndex = Math.max(0, ordered.findIndex((image) => image.is_primary));
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const active = ordered[activeIndex] ?? ordered[0];
+
+  if (!active) return null;
+  return (
+    <div className="mt-4 overflow-hidden rounded-md border border-stone-200 bg-stone-50">
+      <div className="relative aspect-[16/9] max-h-80 w-full bg-stone-100">
+        <Image src={active.url} alt={`${name} — imagem ${activeIndex + 1}`} fill sizes="(max-width: 1280px) 100vw, 700px" className="object-cover" />
+        {ordered.length > 1 ? (
+          <>
+            <button type="button" aria-label="Imagem anterior" onClick={() => setActiveIndex((activeIndex - 1 + ordered.length) % ordered.length)} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/65 px-3 py-2 text-white">‹</button>
+            <button type="button" aria-label="Próxima imagem" onClick={() => setActiveIndex((activeIndex + 1) % ordered.length)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/65 px-3 py-2 text-white">›</button>
+            <span className="absolute bottom-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-xs text-white">{activeIndex + 1}/{ordered.length}</span>
+          </>
+        ) : null}
+      </div>
+      {ordered.length > 1 ? (
+        <div className="flex gap-2 overflow-x-auto p-2">
+          {ordered.map((image, index) => (
+            <button key={image.id} type="button" onClick={() => setActiveIndex(index)} aria-label={`Ver imagem ${index + 1}`} className={`shrink-0 rounded-md border-2 ${index === activeIndex ? "border-[#216450]" : "border-transparent"}`}>
+              <Image src={image.url} alt="" width={72} height={52} className="h-[52px] w-[72px] rounded object-cover" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }

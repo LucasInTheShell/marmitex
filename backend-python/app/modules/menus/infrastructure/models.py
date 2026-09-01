@@ -1,4 +1,6 @@
-from app.modules.menus.domain.entities import Menu, MenuItem
+from uuid import UUID
+
+from app.modules.menus.domain.entities import Menu, MenuItem, MenuItemImage
 
 
 def menu_item_from_row(row: dict) -> MenuItem:
@@ -8,9 +10,17 @@ def menu_item_from_row(row: dict) -> MenuItem:
         description=row["description"],
         size_options=list(row["size_options"]),
         price=row["price"],
+        images=[
+            MenuItemImage(
+                id=UUID(image["id"]) if isinstance(image["id"], str) else image["id"],
+                object_key=image["object_key"],
+                sort_order=image["sort_order"],
+                is_primary=image["is_primary"],
+            )
+            for image in row.get("images", [])
+        ],
     )
 
 
 def menu_from_row(row: dict) -> Menu:
     return Menu(**row)
-

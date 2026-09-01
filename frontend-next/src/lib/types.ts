@@ -52,6 +52,30 @@ export type MenuItem = {
   description: string | null;
   size_options: SizeOption[];
   price: number | null;
+  image_url: string | null;
+  images: MenuItemImage[];
+};
+
+export type Employee = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  name: string;
+  department: string;
+  internal_id: string | null;
+};
+
+export type EmployeeAccess = {
+  token: string;
+  expires_at: string;
+  employee: Employee;
+};
+
+export type MenuItemImage = {
+  id: string;
+  url: string;
+  sort_order: number;
+  is_primary: boolean;
 };
 
 export type AvailableMealSchedule = {
@@ -140,6 +164,11 @@ export type OrderCreatePayload = {
   employee_internal_id?: string | null;
   items: OrderCreateItem[];
 };
+
+export type EmployeeOrderCreatePayload = Pick<
+  OrderCreatePayload,
+  "date" | "meal_schedule_id" | "items"
+>;
 
 export type ProductionSizeSummary = {
   size: SizeOption;

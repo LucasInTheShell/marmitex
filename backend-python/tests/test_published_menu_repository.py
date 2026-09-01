@@ -41,6 +41,7 @@ async def test_available_query_excludes_unpublished_and_empty_menus() -> None:
     # CROSS JOIN faz um array vazio produzir zero linhas, ocultando o cardápio vazio.
     assert "cross join lateral unnest(m.menu_item_ids)" in connection.query
     assert "with ordinality" in connection.query
+    assert "mi.deleted_at is null" in connection.query
     assert connection.params == (date(2026, 8, 31), date(2026, 9, 4))
 
 

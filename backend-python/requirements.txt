@@ -1,9 +1,12 @@
 # Runtime
 argon2-cffi>=25.1,<26
+boto3>=1.35,<2
 email-validator>=2.2,<3
 fastapi>=0.116,<1
 psycopg[binary,pool]>=3.2,<4
 pydantic-settings>=2.10,<3
+pillow>=11.3,<13
+python-multipart>=0.0.20,<1
 uvicorn[standard]>=0.35,<1
 
 # Development and tests

@@ -1,5 +1,4 @@
 from datetime import date, datetime, time
-from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -8,13 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 SizeOption = Literal["P", "M", "G"]
 
 
-class MenuItemCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=160)
-    description: str | None = Field(default=None, max_length=500)
-    size_options: list[SizeOption] = Field(min_length=1)
-    price: Decimal | None = Field(
-        default=None, ge=0, max_digits=10, decimal_places=2
-    )
+class MenuItemImageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    url: str
+    sort_order: int
+    is_primary: bool
 
 
 class MenuItemResponse(BaseModel):
@@ -25,6 +24,8 @@ class MenuItemResponse(BaseModel):
     description: str | None
     size_options: list[SizeOption]
     price: float | None
+    image_url: str | None = None
+    images: list[MenuItemImageResponse] = Field(default_factory=list)
 
 
 class MenuResponse(BaseModel):
@@ -65,4 +66,3 @@ class WeekMenuUpdate(BaseModel):
 
 class WeekPublishRequest(BaseModel):
     dates: list[date] = Field(min_length=1, max_length=7)
-

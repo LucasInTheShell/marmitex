@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.router import api_router
@@ -12,6 +13,8 @@ from app.core.config import Settings, get_settings
 from app.core.database import Database
 from app.core.exceptions import ApplicationError
 from app.core.logging import configure_logging, request_log_middleware
+from app.modules.menus.infrastructure.image_processing import PillowImageProcessor
+from app.modules.menus.infrastructure.storage import build_object_storage
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None) -> FastAPI:
@@ -30,6 +33,8 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
     app.state.settings = app_settings
     app.state.database = app_database
+    app.state.menu_item_storage = build_object_storage(app_settings)
+    app.state.menu_item_image_processor = PillowImageProcessor()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.cors_origins,
@@ -39,6 +44,13 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     )
 
     app.middleware("http")(request_log_middleware)
+
+    if app_settings.storage_backend == "local":
+        app.mount(
+            "/media",
+            StaticFiles(directory=app_settings.storage_local_path, check_dir=False),
+            name="media",
+        )
 
     @app.exception_handler(ApplicationError)
     async def application_error(_: Request, error: ApplicationError) -> JSONResponse:
@@ -53,9 +65,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         )
 
     @app.exception_handler(RequestValidationError)
-    async def request_validation_error(
-        _: Request, __: RequestValidationError
-    ) -> JSONResponse:
+    async def request_validation_error(_: Request, __: RequestValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=422,
             content={
