@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,6 +16,7 @@ from app.core.exceptions import ApplicationError
 from app.core.logging import configure_logging, request_log_middleware
 from app.modules.menus.infrastructure.image_processing import PillowImageProcessor
 from app.modules.menus.infrastructure.storage import build_object_storage
+from app.modules.payments.infrastructure.worker import payment_worker
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None) -> FastAPI:
@@ -25,9 +27,16 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await app_database.open()
+        worker = None
+        if app_settings.asaas_api_key and app_settings.asaas_webhook_token:
+            worker = asyncio.create_task(payment_worker(app_database, app_settings))
         try:
             yield
         finally:
+            if worker is not None:
+                worker.cancel()
+                with suppress(asyncio.CancelledError):
+                    await worker
             await app_database.close()
 
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)

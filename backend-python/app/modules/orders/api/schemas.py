@@ -4,7 +4,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.orders.domain.entities import ProductionStatus
+from app.modules.orders.domain.entities import (
+    PaymentMethod,
+    PaymentStatus,
+    ProductionStatus,
+)
 
 SizeOption = Literal["P", "M", "G"]
 
@@ -29,6 +33,7 @@ class OrderCreateRequest(BaseModel):
     employee_cpf: str = Field(min_length=11, max_length=18)
     employee_internal_id: str | None = Field(default=None, max_length=50)
     items: list[OrderItemCreate] = Field(min_length=1, max_length=10)
+    payment_method: PaymentMethod = PaymentMethod.PAY_ON_DELIVERY
 
 
 class OrderItemResponse(BaseModel):
@@ -63,6 +68,8 @@ class OrderResponse(BaseModel):
     employee_cpf: str
     employee_internal_id: str | None
     production_status: ProductionStatus
+    payment_method: PaymentMethod | None
+    payment_status: PaymentStatus
     total_price: float
     created_at: datetime
     updated_at: datetime

@@ -25,7 +25,7 @@ class FakeMenuService:
         self.schedule_id = uuid4()
         self.created_item: tuple | None = None
 
-    async def create_item(self, *values) -> MenuItemResult:
+    async def create_item(self, *values, size_prices=None) -> MenuItemResult:
         self.created_item = values
         return MenuItemResult(
             id=uuid4(),
@@ -33,6 +33,7 @@ class FakeMenuService:
             description=values[1],
             size_options=values[2],
             price=values[3],
+            size_prices=size_prices or {},
             image_url="https://images.example/menu-items/item/image.webp",
             images=[],
         )

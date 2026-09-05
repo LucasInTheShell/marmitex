@@ -28,6 +28,7 @@ from app.modules.menus.domain.entities import (
 from app.modules.menus.domain.exceptions import (
     EmptyMenuError,
     InvalidMenuItemImageError,
+    InvalidMenuItemPriceError,
     InvalidMenuPeriodError,
     MenuItemNotFoundError,
     MenuItemStorageUnavailableError,
@@ -65,7 +66,9 @@ class MenuApplicationService:
         price: Decimal | None,
         images: list[ImageSource],
         primary_image_index: int = 0,
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItemResult:
+        self._validate_prices(size_options, price, size_prices or {})
         item_id = uuid4()
         if len(images) > MAX_MENU_ITEM_IMAGES:
             raise InvalidMenuItemImageError(
@@ -80,7 +83,7 @@ class MenuApplicationService:
         )
         try:
             item = await self.repository.create_item(
-                item_id, name, description, size_options, price, gallery
+                item_id, name, description, size_options, price, gallery, size_prices or {}
             )
         except Exception:
             await self._delete_images_best_effort(uploaded)
@@ -99,10 +102,14 @@ class MenuApplicationService:
         primary_image_id: UUID | None,
         primary_new_image_index: int | None,
         remove_all_images: bool = False,
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItemResult:
         current = await self.repository.item_by_id(item_id)
         if current is None:
             raise MenuItemNotFoundError()
+        if size_prices is None:
+            size_prices = {s: p for s, p in current.size_prices.items() if s in size_options}
+        self._validate_prices(size_options, price, size_prices)
         current_ids = {image.id for image in current.images}
         requested_removals = current_ids if remove_all_images else set(remove_image_ids)
         if not requested_removals.issubset(current_ids):
@@ -135,7 +142,7 @@ class MenuApplicationService:
         gallery = self._normalize_gallery(retained + uploaded, selected_primary_id)
         try:
             updated = await self.repository.update_item(
-                item_id, name, description, size_options, price, gallery
+                item_id, name, description, size_options, price, gallery, size_prices or {}
             )
         except Exception:
             await self._delete_images_best_effort(uploaded)
@@ -146,6 +153,26 @@ class MenuApplicationService:
         removed = [image for image in current.images if image.id in requested_removals]
         await self._delete_images_best_effort(removed)
         return self._result(updated)
+
+    @staticmethod
+    def _validate_prices(
+        sizes: list[str], price: Decimal | None, size_prices: dict[str, Decimal]
+    ) -> None:
+        if not sizes or not set(sizes).issubset({"P", "M", "G"}):
+            raise InvalidMenuItemPriceError()
+        if not set(size_prices).issubset(sizes):
+            raise InvalidMenuItemPriceError()
+        if size_prices and price is None and set(size_prices) != set(sizes):
+            raise InvalidMenuItemPriceError()
+        values = list(size_prices.values()) + ([price] if price is not None else [])
+        for value in values:
+            if (
+                not value.is_finite()
+                or value < 0
+                or value > Decimal("99999999.99")
+                or value != value.quantize(Decimal("0.01"))
+            ):
+                raise InvalidMenuItemPriceError()
 
     async def delete_item(self, item_id: UUID) -> None:
         deleted = await self.repository.delete_item(item_id)
@@ -319,6 +346,7 @@ class MenuApplicationService:
             description=item.description,
             size_options=item.size_options,
             price=item.price,
+            size_prices=item.size_prices,
             image_url=primary.url if primary else None,
             images=image_results,
         )

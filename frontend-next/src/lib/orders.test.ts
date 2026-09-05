@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addToCart, cartQuantity, cartTotal } from "@/lib/orders";
+import { addToCart, cartQuantity, cartTotal, paymentLabel } from "@/lib/orders";
 
 describe("order cart", () => {
   it("merges equal dish and size without losing a note", () => {
@@ -43,5 +43,13 @@ describe("order cart", () => {
 
     expect(cartQuantity(items)).toBe(3);
     expect(cartTotal(items)).toBe(65);
+  });
+});
+
+describe("payment labels", () => {
+  it("distinguishes delivery, pending Pix and paid Pix", () => {
+    expect(paymentLabel("pay_on_delivery", "not_applicable")).toBe("Pagar na entrega");
+    expect(paymentLabel("pix", "pending")).toBe("Aguardando pagamento");
+    expect(paymentLabel("pix", "paid")).toBe("Pix pago");
   });
 });

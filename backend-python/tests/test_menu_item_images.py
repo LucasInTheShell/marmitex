@@ -30,8 +30,9 @@ class FakeMenuRepository:
         size_options: list[str],
         price: Decimal | None,
         images: list[MenuItemImage],
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItem:
-        item = MenuItem(item_id, name, description, size_options, price, images)
+        item = MenuItem(item_id, name, description, size_options, price, images, size_prices or {})
         self.items[item_id] = item
         return item
 
@@ -43,10 +44,11 @@ class FakeMenuRepository:
         size_options: list[str],
         price: Decimal | None,
         images: list[MenuItemImage],
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItem | None:
         if item_id not in self.items:
             return None
-        item = MenuItem(item_id, name, description, size_options, price, images)
+        item = MenuItem(item_id, name, description, size_options, price, images, size_prices or {})
         self.items[item_id] = item
         return item
 

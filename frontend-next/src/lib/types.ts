@@ -9,6 +9,19 @@ export type ProductionStatus =
   | "delivered"
   | "cancelled";
 
+export type PaymentMethod = "pay_on_delivery" | "pix";
+
+export type PaymentStatus =
+  | "not_applicable"
+  | "pending"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "expired"
+  | "cancelled"
+  | "refunded"
+  | "review_required";
+
 export type KitchenProductionStatus = Exclude<ProductionStatus, "cancelled">;
 
 export type Company = {
@@ -52,6 +65,7 @@ export type MenuItem = {
   description: string | null;
   size_options: SizeOption[];
   price: number | null;
+  size_prices?: Partial<Record<SizeOption, number>>;
   image_url: string | null;
   images: MenuItemImage[];
 };
@@ -129,6 +143,8 @@ export type Order = {
   employee_cpf: string;
   employee_internal_id: string | null;
   production_status: ProductionStatus;
+  payment_method: PaymentMethod | null;
+  payment_status: PaymentStatus;
   total_price: number;
   created_at: string;
   updated_at: string;
@@ -163,12 +179,28 @@ export type OrderCreatePayload = {
   employee_cpf: string;
   employee_internal_id?: string | null;
   items: OrderCreateItem[];
+  payment_method: PaymentMethod;
 };
 
 export type EmployeeOrderCreatePayload = Pick<
   OrderCreatePayload,
-  "date" | "meal_schedule_id" | "items"
+  "date" | "meal_schedule_id" | "items" | "payment_method"
 >;
+
+export type PixCheckout = {
+  order_id: string;
+  payment_status: PaymentStatus;
+  provider: string;
+  provider_payment_id: string;
+  qr_code_base64: string;
+  pix_copy_paste: string;
+  billing_name: string;
+  billing_email: string;
+  billing_tax_id: string;
+  amount_cents: number;
+  currency: string;
+  expires_at: string;
+};
 
 export type ProductionSizeSummary = {
   size: SizeOption;

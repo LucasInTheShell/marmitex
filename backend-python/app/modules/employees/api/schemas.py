@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.orders.api.schemas import OrderItemCreate
+from app.modules.orders.domain.entities import PaymentMethod
 
 
 class EmployeeResponse(BaseModel):
@@ -78,3 +79,4 @@ class EmployeeOrderCreateRequest(BaseModel):
     date: date
     meal_schedule_id: UUID
     items: list[OrderItemCreate] = Field(min_length=1, max_length=10)
+    payment_method: PaymentMethod = PaymentMethod.PAY_ON_DELIVERY

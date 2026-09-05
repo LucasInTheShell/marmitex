@@ -11,7 +11,13 @@ from app.modules.companies.domain.repositories import CompanyRepository
 from app.modules.menus.domain.repositories import MenuRepository
 from app.modules.operations.domain.cutoff import ordering_window
 from app.modules.operations.domain.repositories import OperationalSettingsRepository
-from app.modules.orders.domain.entities import Order, OrderDraft, OrderItemDraft
+from app.modules.orders.domain.entities import (
+    Order,
+    OrderDraft,
+    OrderItemDraft,
+    PaymentMethod,
+    PaymentStatus,
+)
 from app.modules.orders.domain.exceptions import (
     CompanyCannotOrderError,
     IdempotencyConflictError,
@@ -61,6 +67,7 @@ class CreateOrderCommand:
     employee_internal_id: str | None
     items: list[RequestedOrderItem]
     idempotency_key: str | None = None
+    payment_method: PaymentMethod = PaymentMethod.PAY_ON_DELIVERY
 
 
 class CreateOrder:
@@ -165,6 +172,12 @@ class CreateOrder:
             idempotency_key=idempotency_key,
             request_fingerprint=fingerprint if idempotency_key else None,
             items=item_drafts,
+            payment_method=command.payment_method,
+            payment_status=(
+                PaymentStatus.PENDING
+                if command.payment_method is PaymentMethod.PIX
+                else PaymentStatus.NOT_APPLICABLE
+            ),
         )
 
         try:
@@ -211,7 +224,8 @@ class CreateOrder:
                     "Itens repetidos com o mesmo prato e tamanho devem usar quantity."
                 )
             seen.add(key)
-            if menu_item.price is None:
+            unit_price = menu_item.price_for_size(size)
+            if unit_price is None:
                 raise MenuItemWithoutPriceError()
             notes = requested.notes.strip() or None if requested.notes else None
             drafts.append(
@@ -221,8 +235,8 @@ class CreateOrder:
                     item_description=menu_item.description,
                     size=size,
                     quantity=requested.quantity,
-                    unit_price=menu_item.price,
-                    subtotal=menu_item.price * requested.quantity,
+                    unit_price=unit_price,
+                    subtotal=unit_price * requested.quantity,
                     notes=notes,
                 )
             )
@@ -246,6 +260,7 @@ class CreateOrder:
             "employee_department": employee_department,
             "employee_cpf": employee_cpf,
             "employee_internal_id": employee_internal_id,
+            "payment_method": command.payment_method.value,
             "items": [
                 {
                     "menu_item_id": str(item.menu_item_id),

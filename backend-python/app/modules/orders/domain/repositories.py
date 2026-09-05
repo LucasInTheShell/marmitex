@@ -26,6 +26,7 @@ class OrderRepository(Protocol):
         end: date,
         company_id: UUID | None = None,
         production_status: ProductionStatus | None = None,
+        employee_cpf: str | None = None,
         *,
         active_only: bool = False,
     ) -> list[Order]: ...

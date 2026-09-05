@@ -6,6 +6,15 @@ class EmptyMenuError(ApplicationError):
         super().__init__("empty_menu", "Nenhum cardápio preenchido foi encontrado.", 422)
 
 
+class InvalidMenuItemPriceError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            "invalid_menu_item_price",
+            "Informe preços válidos (até duas casas decimais) para os tamanhos disponíveis.",
+            422,
+        )
+
+
 class InvalidMenuPeriodError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

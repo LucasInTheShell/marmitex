@@ -2,17 +2,24 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { createEmployeeOrderAction } from "@/app/funcionario/actions";
-import type { AvailableMenu, Employee, MenuItem, Order, SizeOption } from "@/lib/types";
+import {
+  createEmployeeOrderAction,
+  createEmployeePixCheckoutAction,
+  switchEmployeePaymentToDeliveryAction,
+} from "@/app/funcionario/actions";
+import { PixPaymentPanel } from "@/components/pix-payment-panel";
+import { menuPriceLabel, priceForSize } from "@/lib/menu-pricing";
+import { paymentLabel } from "@/lib/orders";
+import type { AvailableMenu, Employee, MenuItem, Order, PaymentMethod, PixCheckout, SizeOption } from "@/lib/types";
 
-type Step = "menu" | "details" | "review" | "success";
+type Step = "menu" | "details" | "review" | "payment" | "success";
 type CartItem = { menuItem: MenuItem; size: SizeOption; quantity: number; notes: string };
 
-const STEP_LABELS = ["Identificação", "Cardápio", "Detalhes", "Revisão"];
+const STEP_LABELS = ["Identificação", "Cardápio", "Detalhes", "Revisão", "Pagamento"];
 
-export function EmployeeOrderFlow({ employee, availableMenus }: { employee: Employee; availableMenus: AvailableMenu[] }) {
+export function EmployeeOrderFlow({ employee, availableMenus, initialOrders }: { employee: Employee; availableMenus: AvailableMenu[]; initialOrders: Order[] }) {
   const [step, setStep] = useState<Step>("menu");
   const [selectedDate, setSelectedDate] = useState(availableMenus[0]?.date ?? "");
   const selectedMenu = availableMenus.find((menu) => menu.date === selectedDate);
@@ -25,8 +32,19 @@ export function EmployeeOrderFlow({ employee, availableMenus }: { employee: Empl
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
-  const total = useMemo(() => cart.reduce((sum, item) => sum + Number(item.menuItem.price ?? 0) * item.quantity, 0), [cart]);
-  const currentStep = { menu: 1, details: 2, review: 3, success: 4 }[step];
+  const [checkout, setCheckout] = useState<PixCheckout | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_delivery");
+  const [recentOrders, setRecentOrders] = useState(initialOrders);
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
+  const total = useMemo(() => cart.reduce((sum, item) => sum + Number(priceForSize(item.menuItem, item.size) ?? 0) * item.quantity, 0), [cart]);
+  const currentStep = { menu: 1, details: 2, review: 3, payment: 4, success: 4 }[step];
+  const paymentAttentionOrders = recentOrders.filter((item) => item.payment_method === "pix" && ["processing", "review_required", "refunded", "expired"].includes(item.payment_status));
+  const pendingPixOrders = recentOrders.filter((item) => item.payment_method === "pix" && ["pending", "failed"].includes(item.payment_status) && item.production_status === "pending" && item.cutoff_at && currentTime !== null && Date.parse(item.cutoff_at) > currentTime);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function chooseDate(date: string) {
     const menu = availableMenus.find((candidate) => candidate.date === date);
@@ -47,7 +65,7 @@ export function EmployeeOrderFlow({ employee, availableMenus }: { employee: Empl
 
   function addItem(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedDish) return;
+    if (!selectedDish || priceForSize(selectedDish, size) === null) return;
     const sameItem = cart.findIndex((item) => item.menuItem.id === selectedDish.id && item.size === size);
     if (sameItem >= 0) {
       setCart((current) => current.map((item, index) => index === sameItem ? { ...item, quantity: Math.min(10, item.quantity + quantity), notes: notes || item.notes } : item));
@@ -70,7 +88,7 @@ export function EmployeeOrderFlow({ employee, availableMenus }: { employee: Empl
     setSubmitting(true);
     setError(null);
     const result = await createEmployeeOrderAction(
-      { date: selectedDate, meal_schedule_id: scheduleId, items: cart.map((item) => ({ menu_item_id: item.menuItem.id, size: item.size, quantity: item.quantity, notes: item.notes || null })) },
+      { date: selectedDate, meal_schedule_id: scheduleId, payment_method: paymentMethod, items: cart.map((item) => ({ menu_item_id: item.menuItem.id, size: item.size, quantity: item.quantity, notes: item.notes || null })) },
       crypto.randomUUID(),
     );
     setSubmitting(false);
@@ -78,11 +96,52 @@ export function EmployeeOrderFlow({ employee, availableMenus }: { employee: Empl
       setError(result.error);
       return;
     }
-    setOrder(result.order ?? null);
-    setStep("success");
+    if (!result.order) return;
+    setOrder(result.order);
+    setRecentOrders((current) => [result.order!, ...current]);
+    if (paymentMethod === "pay_on_delivery") {
+      setStep("success");
+      return;
+    }
+    const pix = await createEmployeePixCheckoutAction(result.order.id);
+    if (pix.error || !pix.checkout) {
+      setError(pix.error ?? "Pedido criado, mas não foi possível abrir o Pix. Continue pelo histórico.");
+      setStep("menu");
+      return;
+    }
+    setCheckout(pix.checkout);
+    setStep("payment");
   }
 
-  if (availableMenus.length === 0) {
+  async function resumePix(pendingOrder: Order) {
+    setSubmitting(true);
+    setError(null);
+    const result = await createEmployeePixCheckoutAction(pendingOrder.id);
+    setSubmitting(false);
+    if (result.error || !result.checkout) {
+      setError(result.error ?? "Não foi possível continuar o Pix.");
+      return;
+    }
+    setOrder(pendingOrder);
+    setCheckout(result.checkout);
+    setStep("payment");
+  }
+
+  async function switchToDelivery(): Promise<Order | null> {
+    if (!order) return null;
+    const result = await switchEmployeePaymentToDeliveryAction(order.id);
+    if (!result.order) {
+      setError(result.error ?? "Não foi possível alterar a forma de pagamento.");
+      return null;
+    }
+    setOrder(result.order);
+    setRecentOrders((current) => current.map((item) => item.id === result.order!.id ? result.order! : item));
+    setCheckout(null);
+    setStep("success");
+    return result.order;
+  }
+
+  if (availableMenus.length === 0 && pendingPixOrders.length === 0 && paymentAttentionOrders.length === 0 && step === "menu") {
     return <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6"><StepCard eyebrow={`Olá, ${employee.name}`} title="Nenhum cardápio disponível" description="Não há cardápios publicados com horários ainda abertos para sua empresa. Tente novamente mais tarde."><p className="mt-6 rounded-xl bg-stone-50 p-4 text-sm text-stone-600">Empresa: <strong>{employee.company_name}</strong> · Setor: {employee.department}</p></StepCard></main>;
   }
 
@@ -90,23 +149,29 @@ export function EmployeeOrderFlow({ employee, availableMenus }: { employee: Empl
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      {step === "menu" && paymentAttentionOrders.length > 0 && <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-semibold text-amber-900">Acompanhamento dos pagamentos</h2>{paymentAttentionOrders.map((item) => <p key={item.id} className="mt-2 text-sm text-amber-900">Pedido #{item.order_number}: {paymentLabel(item.payment_method, item.payment_status)}.</p>)}<p className="mt-2 text-xs text-amber-800">Se já pagou, não faça outro Pix. Em caso de análise, fale com o responsável da empresa.</p></section>}
       {step !== "success" ? <ol className="mb-6 grid grid-cols-4 gap-1 sm:mb-8 sm:gap-3" aria-label="Etapas do pedido">{STEP_LABELS.map((label, index) => <li key={label} className="min-w-0"><div className={`h-1.5 rounded-full ${index <= currentStep ? "bg-[#216450]" : "bg-stone-200"}`} /><span className={`mt-2 block truncate text-[11px] font-medium sm:text-sm ${index === currentStep ? "text-[#216450]" : "text-stone-500"}`}>{index + 1}. {label}</span></li>)}</ol> : null}
 
       {step === "menu" ? <section>
         <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-sm font-semibold text-[#34725f]">Olá, {employee.name}</p><h1 className="mt-1 text-2xl font-semibold text-stone-900 sm:text-3xl">Escolha sua marmita</h1><p className="mt-2 text-sm text-stone-600">{employee.company_name} · {employee.department}</p></div><Link href="/funcionario" className="text-sm font-semibold text-[#216450] hover:underline">Alterar CPF</Link></div>
+        {pendingPixOrders.length ? <section className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5"><h2 className="font-semibold text-amber-950">Pagamentos Pix pendentes</h2><p className="mt-1 text-sm text-amber-800">Você pode concluir o pagamento ou trocar para pagamento na entrega até o horário de corte.</p><div className="mt-4 grid gap-3">{pendingPixOrders.map((pendingOrder) => <button key={pendingOrder.id} type="button" disabled={submitting} onClick={() => resumePix(pendingOrder)} className="flex min-h-12 items-center justify-between rounded-xl border border-amber-300 bg-white px-4 text-left text-sm disabled:opacity-60"><span><strong>Pedido #{pendingOrder.order_number}</strong><span className="ml-2 text-stone-500">{dateLabel(pendingOrder.date)}</span></span><span className="font-semibold text-[#216450]">Continuar Pix</span></button>)}</div></section> : null}
+        {!availableMenus.length ? <p className="rounded-2xl border border-stone-200 bg-white p-6 text-sm text-stone-600">Nenhum novo cardápio disponível neste momento.</p> : <>
         <div className="mb-6 grid gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:grid-cols-2">
           <label className="text-sm font-semibold text-stone-700">Dia do almoço<select value={selectedDate} onChange={(event) => chooseDate(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{availableMenus.map((menu) => <option key={menu.date} value={menu.date}>{dateLabel(menu.date)}</option>)}</select></label>
           <label className="text-sm font-semibold text-stone-700">Horário disponível<select value={scheduleId} onChange={(event) => setScheduleId(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{selectedMenu?.available_schedules.map((schedule) => <option key={schedule.id} value={schedule.id}>{schedule.label} · {schedule.meal_time.slice(0, 5)}</option>)}</select></label>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{selectedMenu?.items.map((dish) => <button key={dish.id} type="button" onClick={() => selectDish(dish)} className="group overflow-hidden rounded-2xl border border-stone-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#79a995] hover:shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-100"><div className="relative h-40 bg-[#dcebe5]">{dish.image_url ? <Image src={dish.image_url} alt={dish.name} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /> : <span className="grid h-full place-items-center text-sm font-semibold text-[#34725f]">Sem foto</span>}</div><div className="p-5"><div className="flex items-start justify-between gap-4"><h2 className="text-lg font-semibold text-stone-900">{dish.name}</h2><span className="shrink-0 font-semibold text-[#216450]">{money(dish.price)}</span></div><p className="mt-2 min-h-12 text-sm leading-6 text-stone-600">{dish.description || "Sem descrição."}</p><span className="mt-5 block min-h-12 rounded-xl bg-[#eef7f3] px-4 py-3 text-center text-sm font-semibold text-[#216450] group-hover:bg-[#216450] group-hover:text-white">Ver detalhes</span></div></button>)}</div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{selectedMenu?.items.map((dish) => <button key={dish.id} type="button" onClick={() => selectDish(dish)} className="group overflow-hidden rounded-2xl border border-stone-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#79a995] hover:shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-100"><div className="relative h-40 bg-[#dcebe5]">{dish.image_url ? <Image src={dish.image_url} alt={dish.name} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" /> : <span className="grid h-full place-items-center text-sm font-semibold text-[#34725f]">Sem foto</span>}</div><div className="p-5"><div className="flex items-start justify-between gap-4"><h2 className="text-lg font-semibold text-stone-900">{dish.name}</h2><span className="shrink-0 font-semibold text-[#216450]">{menuPriceLabel(dish)}</span></div><p className="mt-2 min-h-12 text-sm leading-6 text-stone-600">{dish.description || "Sem descrição."}</p><span className="mt-5 block min-h-12 rounded-xl bg-[#eef7f3] px-4 py-3 text-center text-sm font-semibold text-[#216450] group-hover:bg-[#216450] group-hover:text-white">Ver detalhes</span></div></button>)}</div>
         <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-5"><div className="flex items-center justify-between gap-4"><div><h2 className="font-semibold text-stone-900">Seu pedido</h2><p className="text-sm text-stone-500">{cart.length} tipo(s) de marmita</p></div><strong className="text-[#216450]">{money(total)}</strong></div>{cart.length ? <ul className="mt-4 divide-y divide-stone-200">{cart.map((item, index) => <li key={`${item.menuItem.id}-${item.size}`} className="flex items-center justify-between gap-3 py-3 text-sm"><span>{item.quantity}× {item.menuItem.name} · {item.size}</span><button type="button" onClick={() => setCart((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="font-semibold text-red-600">Remover</button></li>)}</ul> : <p className="mt-4 text-sm text-stone-500">Escolha um prato acima para começar.</p>}{error ? <p role="alert" className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}<button type="button" onClick={goToReview} disabled={!cart.length} className="mt-5 min-h-14 w-full rounded-xl bg-[#216450] px-5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Revisar pedido</button></div>
+        </>}
       </section> : null}
 
-      {step === "details" && selectedDish ? <StepCard eyebrow="Passo 3 de 4" title={selectedDish.name} description={selectedDish.description || "Configure sua marmita."} back={() => setStep("menu")}><form onSubmit={addItem} className="mt-7 grid gap-7 lg:grid-cols-[1fr_320px]"><div className="space-y-7"><DishImageCarousel dish={selectedDish} /><fieldset><legend className="text-sm font-semibold text-stone-800">Escolha o tamanho</legend><div className="mt-3 grid grid-cols-3 gap-3">{selectedDish.size_options.map((option) => <button key={option} type="button" aria-pressed={size === option} onClick={() => setSize(option)} className={`min-h-14 rounded-xl border text-base font-bold ${size === option ? "border-[#216450] bg-[#216450] text-white" : "border-stone-300 bg-white text-stone-700"}`}>{option}</button>)}</div></fieldset><div><p className="text-sm font-semibold text-stone-800">Quantidade</p><div className="mt-3 flex w-fit items-center overflow-hidden rounded-xl border border-stone-300 bg-white"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((current) => Math.max(1, current - 1))} className="grid size-14 place-items-center text-2xl">−</button><output className="grid h-14 min-w-16 place-items-center border-x border-stone-300 text-lg font-bold">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((current) => Math.min(10, current + 1))} className="grid size-14 place-items-center text-2xl">+</button></div></div><label className="block text-sm font-semibold text-stone-800">Observações (opcional)<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} maxLength={300} placeholder="Ex.: sem cebola" className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-3 font-normal outline-none" /></label></div><aside className="rounded-2xl bg-[#eef7f3] p-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#34725f]">Sua escolha</p><p className="mt-3 text-xl font-semibold text-[#17372f]">{selectedDish.name}</p><p className="mt-2 text-sm text-[#34725f]">Tamanho {size} · {quantity} unidade(s)</p><div className="my-5 border-t border-[#cfe2da]" /><p className="text-2xl font-semibold text-[#17372f]">{money(Number(selectedDish.price ?? 0) * quantity)}</p><button type="submit" className="mt-6 min-h-14 w-full rounded-xl bg-[#216450] px-5 font-semibold text-white">Adicionar ao pedido</button></aside></form></StepCard> : null}
+      {step === "details" && selectedDish ? <StepCard eyebrow="Passo 3 de 4" title={selectedDish.name} description={selectedDish.description || "Configure sua marmita."} back={() => setStep("menu")}><form onSubmit={addItem} className="mt-7 grid gap-7 lg:grid-cols-[1fr_320px]"><div className="space-y-7"><DishImageCarousel dish={selectedDish} /><fieldset><legend className="text-sm font-semibold text-stone-800">Escolha o tamanho</legend><div className="mt-3 grid grid-cols-3 gap-3">{selectedDish.size_options.map((option) => <button key={option} type="button" aria-pressed={size === option} onClick={() => setSize(option)} className={`min-h-14 rounded-xl border text-base font-bold ${size === option ? "border-[#216450] bg-[#216450] text-white" : "border-stone-300 bg-white text-stone-700"}`}>{option}<span className="block text-xs font-normal">{money(priceForSize(selectedDish, option))}</span></button>)}</div></fieldset><div><p className="text-sm font-semibold text-stone-800">Quantidade</p><div className="mt-3 flex w-fit items-center overflow-hidden rounded-xl border border-stone-300 bg-white"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((current) => Math.max(1, current - 1))} className="grid size-14 place-items-center text-2xl">−</button><output className="grid h-14 min-w-16 place-items-center border-x border-stone-300 text-lg font-bold">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((current) => Math.min(10, current + 1))} className="grid size-14 place-items-center text-2xl">+</button></div></div><label className="block text-sm font-semibold text-stone-800">Observações (opcional)<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} maxLength={300} placeholder="Ex.: sem cebola" className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-3 font-normal outline-none" /></label></div><aside className="rounded-2xl bg-[#eef7f3] p-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#34725f]">Sua escolha</p><p className="mt-3 text-xl font-semibold text-[#17372f]">{selectedDish.name}</p><p className="mt-2 text-sm text-[#34725f]">Tamanho {size} · {quantity} unidade(s)</p><div className="my-5 border-t border-[#cfe2da]" /><p className="text-2xl font-semibold text-[#17372f]">{priceForSize(selectedDish, size) === null ? "Sem preço" : money(Number(priceForSize(selectedDish, size)) * quantity)}</p><button type="submit" disabled={priceForSize(selectedDish, size) === null} className="mt-6 min-h-14 w-full rounded-xl bg-[#216450] px-5 font-semibold text-white disabled:opacity-50">Adicionar ao pedido</button></aside></form></StepCard> : null}
 
-      {step === "review" ? <StepCard eyebrow="Passo 4 de 4" title="Revise antes de confirmar" description="Confira os dados abaixo. O pedido será enviado para a cozinha." back={() => setStep("menu")}><div className="mt-7 grid gap-5 lg:grid-cols-2"><ReviewSection title="Funcionário"><ReviewRow label="Nome" value={employee.name} /><ReviewRow label="Setor" value={employee.department} />{employee.internal_id ? <ReviewRow label="Matrícula" value={employee.internal_id} /> : null}<ReviewRow label="Empresa" value={employee.company_name} /></ReviewSection><ReviewSection title="Entrega"><ReviewRow label="Data" value={dateLabel(selectedDate)} /><ReviewRow label="Horário" value={selectedSchedule ? `${selectedSchedule.label} · ${selectedSchedule.meal_time.slice(0, 5)}` : "—"} /><ReviewRow label="Total" value={money(total)} /></ReviewSection></div><ReviewSection title="Itens"><div className="space-y-3">{cart.map((item) => <ReviewRow key={`${item.menuItem.id}-${item.size}`} label={`${item.quantity}× ${item.menuItem.name}`} value={`${item.size} · ${money(Number(item.menuItem.price ?? 0) * item.quantity)}`} />)}</div></ReviewSection>{error ? <p role="alert" className="mt-5 text-sm font-medium text-red-600">{error}</p> : null}<div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setStep("menu")} className="min-h-14 rounded-xl border border-stone-300 px-5 font-semibold">Editar pedido</button><button type="button" onClick={confirm} disabled={submitting} className="min-h-14 rounded-xl bg-[#216450] px-6 font-semibold text-white disabled:opacity-70">{submitting ? "Confirmando…" : "Confirmar pedido"}</button></div></StepCard> : null}
+      {step === "review" ? <StepCard eyebrow="Passo 4 de 5" title="Revise antes de confirmar" description={paymentMethod === "pix" ? "O pedido aguardará a confirmação do Pix antes de seguir para a cozinha." : "Confira os dados abaixo. O pedido será enviado para a cozinha."} back={() => setStep("menu")}><div className="mt-7 grid gap-5 lg:grid-cols-2"><ReviewSection title="Funcionário"><ReviewRow label="Nome" value={employee.name} /><ReviewRow label="Setor" value={employee.department} />{employee.internal_id ? <ReviewRow label="Matrícula" value={employee.internal_id} /> : null}<ReviewRow label="Empresa" value={employee.company_name} /></ReviewSection><ReviewSection title="Entrega"><ReviewRow label="Data" value={dateLabel(selectedDate)} /><ReviewRow label="Horário" value={selectedSchedule ? `${selectedSchedule.label} · ${selectedSchedule.meal_time.slice(0, 5)}` : "—"} /><ReviewRow label="Total" value={money(total)} /></ReviewSection></div><ReviewSection title="Itens"><div className="space-y-3">{cart.map((item) => <ReviewRow key={`${item.menuItem.id}-${item.size}`} label={`${item.quantity}× ${item.menuItem.name}`} value={`${item.size} · ${money(Number(priceForSize(item.menuItem, item.size) ?? 0) * item.quantity)}`} />)}</div></ReviewSection><ReviewSection title="Forma de pagamento"><div className="grid gap-3 sm:grid-cols-2"><label className={`cursor-pointer rounded-xl border p-4 ${paymentMethod === "pay_on_delivery" ? "border-[#216450] bg-emerald-50" : "border-stone-300 bg-white"}`}><input type="radio" checked={paymentMethod === "pay_on_delivery"} onChange={() => setPaymentMethod("pay_on_delivery")} className="mr-2 accent-[#216450]" /><strong>Pagar na entrega</strong><span className="mt-1 block text-sm text-stone-500">O pedido segue diretamente para a cozinha.</span></label><label className={`cursor-pointer rounded-xl border p-4 ${paymentMethod === "pix" ? "border-[#216450] bg-emerald-50" : "border-stone-300 bg-white"}`}><input type="radio" checked={paymentMethod === "pix"} onChange={() => setPaymentMethod("pix")} className="mr-2 accent-[#216450]" /><strong>Pix no aplicativo</strong><span className="mt-1 block text-sm text-stone-500">Use o e-mail da empresa e aguarde confirmação.</span></label></div></ReviewSection>{error ? <p role="alert" className="mt-5 text-sm font-medium text-red-600">{error}</p> : null}<div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setStep("menu")} className="min-h-14 rounded-xl border border-stone-300 px-5 font-semibold">Editar pedido</button><button type="button" onClick={confirm} disabled={submitting} className="min-h-14 rounded-xl bg-[#216450] px-6 font-semibold text-white disabled:opacity-70">{submitting ? "Confirmando…" : paymentMethod === "pix" ? "Criar pedido e gerar Pix" : "Confirmar pedido"}</button></div></StepCard> : null}
 
-      {step === "success" && order ? <section className="mx-auto max-w-2xl rounded-3xl border border-emerald-200 bg-white px-6 py-12 text-center shadow-sm sm:px-10"><span className="mx-auto grid size-20 place-items-center rounded-full bg-emerald-100 text-4xl text-emerald-700">✓</span><p className="mt-6 text-sm font-semibold uppercase tracking-wide text-emerald-700">Pedido confirmado</p><h1 className="mt-2 text-3xl font-semibold text-stone-900">Pedido realizado!</h1><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-stone-600">Obrigado, {employee.name}. Seu pedido foi salvo e já está disponível para a cozinha.</p><div className="mx-auto mt-7 max-w-sm rounded-xl bg-stone-50 px-5 py-4 text-left text-sm"><ReviewRow label="Pedido" value={`#${order.order_number}`} /><ReviewRow label="Status" value="Recebido" /><ReviewRow label="Total" value={money(order.total_price)} /></div><Link href="/funcionario" className="mt-8 inline-grid min-h-14 place-items-center rounded-xl border border-stone-300 px-6 font-semibold text-stone-700">Finalizar acesso</Link></section> : null}
+      {step === "payment" && order && checkout ? <PixPaymentPanel checkout={checkout} order={order} statusUrl={`/funcionario/api/orders/${order.id}`} onOrderUpdated={(updated) => { setOrder(updated); setRecentOrders((current) => current.map((item) => item.id === updated.id ? updated : item)); if (updated.payment_status === "paid") setStep("success"); }} onSwitchToDelivery={switchToDelivery} /> : null}
+
+      {step === "success" && order ? <section className="mx-auto max-w-2xl rounded-3xl border border-emerald-200 bg-white px-6 py-12 text-center shadow-sm sm:px-10"><span className="mx-auto grid size-20 place-items-center rounded-full bg-emerald-100 text-4xl text-emerald-700">✓</span><p className="mt-6 text-sm font-semibold uppercase tracking-wide text-emerald-700">Pedido confirmado</p><h1 className="mt-2 text-3xl font-semibold text-stone-900">Pedido realizado!</h1><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-stone-600">Obrigado, {employee.name}. {order.payment_status === "paid" ? "O Pix foi confirmado e seu pedido foi liberado para a cozinha." : "Seu pedido foi salvo com pagamento na entrega e já está disponível para a cozinha."}</p><div className="mx-auto mt-7 max-w-sm rounded-xl bg-stone-50 px-5 py-4 text-left text-sm"><ReviewRow label="Pedido" value={`#${order.order_number}`} /><ReviewRow label="Status" value="Recebido" /><ReviewRow label="Pagamento" value={paymentLabel(order.payment_method, order.payment_status)} /><ReviewRow label="Total" value={money(order.total_price)} /></div><Link href="/funcionario" className="mt-8 inline-grid min-h-14 place-items-center rounded-xl border border-stone-300 px-6 font-semibold text-stone-700">Finalizar acesso</Link></section> : null}
     </main>
   );
 }

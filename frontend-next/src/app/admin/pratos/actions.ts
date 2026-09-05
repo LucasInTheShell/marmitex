@@ -83,7 +83,8 @@ function parseMenuItemForm(
   | { ok: false; state: MenuItemFormState } {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const rawPrice = String(formData.get("price") ?? "").trim();
+  const bySize = formData.get("pricing_mode") === "sizes";
+  const rawPrice = bySize ? "" : String(formData.get("price") ?? "").trim();
   const sizes = formData
     .getAll("sizes")
     .map(String)
@@ -100,7 +101,7 @@ function parseMenuItemForm(
   if (sizes.length === 0) {
     return { ok: false, state: { error: "Selecione ao menos um tamanho." } };
   }
-  if (rawPrice && !Number.isFinite(Number(rawPrice.replace(",", ".")))) {
+  if (rawPrice && !validPrice(rawPrice)) {
     return { ok: false, state: { error: "Preço inválido." } };
   }
   if (images.length > MAX_IMAGES) {
@@ -118,7 +119,18 @@ function parseMenuItemForm(
     }
   }
 
+  const sizePrices: Record<string, string> = {};
+  if (bySize) {
+    for (const size of sizes) {
+      const value = String(formData.get(`price_${size}`) ?? "").trim();
+      if (!validPrice(value)) {
+        return { ok: false, state: { error: `Informe um preço válido para o tamanho ${size} (até duas casas decimais).` } };
+      }
+      sizePrices[size] = value.replace(",", ".");
+    }
+  }
   const payload = new FormData();
+  payload.set("size_prices", JSON.stringify(sizePrices));
   payload.set("name", name);
   payload.set("description", description);
   if (rawPrice) payload.set("price", rawPrice.replace(",", "."));
@@ -134,6 +146,10 @@ function parseMenuItemForm(
   return { ok: true, name, payload };
 }
 
+function validPrice(value: string): boolean {
+  return /^\d{1,8}([.,]\d{1,2})?$/.test(value);
+}
+
 function apiError(error: unknown, fallback: string): MenuItemFormState {
   return { error: error instanceof ApiError ? error.message : fallback };
 }
@@ -142,4 +158,6 @@ function revalidateMenuPaths() {
   revalidatePath("/admin/pratos");
   revalidatePath("/admin/cardapio");
   revalidatePath("/empresa");
+  revalidatePath("/funcionario");
+  revalidatePath("/funcionario/pedido");
 }

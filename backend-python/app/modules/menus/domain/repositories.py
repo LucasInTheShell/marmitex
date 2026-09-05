@@ -19,6 +19,7 @@ class MenuRepository(Protocol):
         size_options: list[str],
         price: Decimal | None,
         images: list[MenuItemImage],
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItem: ...
 
     async def update_item(
@@ -29,6 +30,7 @@ class MenuRepository(Protocol):
         size_options: list[str],
         price: Decimal | None,
         images: list[MenuItemImage],
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItem | None: ...
 
     async def delete_item(self, item_id: UUID) -> MenuItem | None: ...

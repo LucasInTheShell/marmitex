@@ -26,9 +26,10 @@ from app.modules.employees.api.schemas import (
 from app.modules.employees.domain.exceptions import InvalidEmployeeError
 from app.modules.menus.api.dependencies import MenuServiceDependency
 from app.modules.menus.api.schemas import AvailableMenuResponse
-from app.modules.orders.api.dependencies import CreateOrderDependency
+from app.modules.orders.api.dependencies import CreateOrderDependency, OrderServiceDependency
 from app.modules.orders.api.schemas import OrderResponse
 from app.modules.orders.application.create_order import CreateOrderCommand, RequestedOrderItem
+from app.modules.orders.domain.exceptions import OrderNotFoundError
 
 router = APIRouter(tags=["employees"])
 
@@ -109,10 +110,42 @@ async def create_employee_order(
                 for item in payload.items
             ],
             idempotency_key=idempotency_key,
+            payment_method=payload.payment_method,
         ),
         datetime.now(ZoneInfo(time_zone)),
         time_zone,
     )
+
+
+@router.get("/employee/orders", response_model=list[OrderResponse])
+async def list_employee_orders(
+    request: Request,
+    employee: CurrentEmployee,
+    service: OrderServiceDependency,
+    start: Annotated[date | None, Query()] = None,
+    end: Annotated[date | None, Query()] = None,
+):
+    today = datetime.now(ZoneInfo(request.app.state.settings.app_time_zone)).date()
+    start = start or end or today
+    end = end or start
+    return await service.list(
+        start,
+        end,
+        employee.company_id,
+        employee_cpf=employee.cpf,
+    )
+
+
+@router.get("/employee/orders/{order_id}", response_model=OrderResponse)
+async def get_employee_order(
+    order_id: UUID,
+    employee: CurrentEmployee,
+    service: OrderServiceDependency,
+):
+    order = await service.by_id(order_id, employee.company_id)
+    if order.employee_cpf != employee.cpf:
+        raise OrderNotFoundError()
+    return order
 
 
 @router.get("/employees", response_model=list[EmployeeResponse])

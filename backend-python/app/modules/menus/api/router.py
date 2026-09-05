@@ -5,6 +5,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile, status
+from pydantic import Json
 
 from app.modules.auth.api.dependencies import AdminAccount, CompanyAccount
 from app.modules.menus.api.dependencies import MenuServiceDependency
@@ -42,6 +43,7 @@ async def create_menu_item(
         Decimal | None,
         Form(ge=0, max_digits=10, decimal_places=2),
     ] = None,
+    size_prices: Annotated[Json[dict[SizeOption, Decimal]] | None, Form()] = None,
     images: Annotated[list[UploadFile] | None, File()] = None,
     primary_image_index: Annotated[int, Form(ge=0)] = 0,
     image: Annotated[UploadFile | None, File()] = None,
@@ -54,6 +56,7 @@ async def create_menu_item(
         price,
         image_sources,
         primary_image_index,
+        size_prices=size_prices,
     )
 
 
@@ -69,6 +72,7 @@ async def update_menu_item(
         Decimal | None,
         Form(ge=0, max_digits=10, decimal_places=2),
     ] = None,
+    size_prices: Annotated[Json[dict[SizeOption, Decimal]] | None, Form()] = None,
     images: Annotated[list[UploadFile] | None, File()] = None,
     remove_image_ids: Annotated[list[UUID] | None, Form()] = None,
     primary_image_id: Annotated[UUID | None, Form()] = None,
@@ -88,6 +92,7 @@ async def update_menu_item(
         primary_image_id,
         primary_new_image_index,
         remove_image,
+        size_prices=size_prices,
     )
 
 

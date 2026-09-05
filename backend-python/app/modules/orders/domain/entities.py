@@ -13,6 +13,23 @@ class ProductionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class PaymentMethod(StrEnum):
+    PAY_ON_DELIVERY = "pay_on_delivery"
+    PIX = "pix"
+
+
+class PaymentStatus(StrEnum):
+    NOT_APPLICABLE = "not_applicable"
+    PENDING = "pending"
+    PROCESSING = "processing"
+    PAID = "paid"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+    REVIEW_REQUIRED = "review_required"
+
+
 @dataclass(frozen=True, slots=True)
 class OrderItemDraft:
     menu_item_id: UUID
@@ -42,6 +59,8 @@ class OrderDraft:
     idempotency_key: str | None
     request_fingerprint: str | None
     items: list[OrderItemDraft]
+    payment_method: PaymentMethod = PaymentMethod.PAY_ON_DELIVERY
+    payment_status: PaymentStatus = PaymentStatus.NOT_APPLICABLE
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +101,8 @@ class Order:
     cancelled_at: datetime | None
     cancellation_reason: str | None
     items: list[OrderItem]
+    payment_method: PaymentMethod | None = None
+    payment_status: PaymentStatus = PaymentStatus.NOT_APPLICABLE
 
 
 @dataclass(frozen=True, slots=True)

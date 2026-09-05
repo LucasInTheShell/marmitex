@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 
-import { SIZE_OPTIONS, type MenuItem } from "@/lib/types";
+import { SIZE_OPTIONS, type MenuItem, type SizeOption } from "@/lib/types";
 
 import {
   createMenuItem,
@@ -26,7 +26,7 @@ export function NewMenuItemForm() {
   return (
     <form ref={formRef} action={formAction} className="rounded-xl border border-stone-200 bg-white p-5">
       <h2 className="mb-4 font-medium text-stone-800">Novo prato</h2>
-      <MenuItemFields resetToken={state.success} />
+      <MenuItemFields key={state.success ?? "new"} resetToken={state.success} />
       <FormMessage state={state} />
       <SubmitButton pending={pending} idle="Cadastrar prato" busy="Cadastrando…" />
     </form>
@@ -51,7 +51,7 @@ export function MenuItemEditor({ item }: { item: MenuItem }) {
             <p className="text-sm text-stone-500">{item.images.length} de {MAX_IMAGES} imagens cadastradas.</p>
           </div>
         </div>
-        <MenuItemFields item={item} resetToken={state.success} />
+        <MenuItemFields key={`${state.success ?? ""}:${JSON.stringify(item)}`} item={item} resetToken={state.success} />
         <FormMessage state={state} />
         <SubmitButton pending={updating} disabled={deleting} idle="Salvar alterações" busy="Salvando…" />
       </form>
@@ -71,22 +71,48 @@ function MenuItemFields({ item, resetToken }: { item?: MenuItem; resetToken?: st
     <>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-stone-700">Nome do prato<input name="name" required defaultValue={item?.name} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-900" /></label>
-        <label className="text-sm text-stone-700">Preço (opcional)<input name="price" inputMode="decimal" placeholder="0,00" defaultValue={item?.price?.toFixed(2).replace(".", ",") ?? ""} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-900" /></label>
+
       </div>
       <label className="mt-4 block text-sm text-stone-700">Descrição (opcional)<input name="description" defaultValue={item?.description ?? ""} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-900" /></label>
       <ImageGalleryFields
         key={`${item?.id ?? "new"}:${resetToken ?? ""}:${item?.images.map((image) => image.id).join(",") ?? ""}`}
         item={item}
       />
-      <fieldset className="mt-4">
-        <legend className="text-sm text-stone-700">Tamanhos disponíveis</legend>
-        <div className="mt-2 flex gap-4">
-          {SIZE_OPTIONS.map((size) => (
-            <label key={size} className="flex items-center gap-2 text-sm"><input type="checkbox" name="sizes" value={size} defaultChecked={item ? item.size_options.includes(size) : true} className="size-4" />{size}</label>
-          ))}
-        </div>
-      </fieldset>
+      <PricingFields item={item} />
     </>
+  );
+}
+
+function PricingFields({ item }: { item?: MenuItem }) {
+  const [mode, setMode] = useState(item && Object.keys(item.size_prices ?? {}).length ? "sizes" : "single");
+  const [sizes, setSizes] = useState<SizeOption[]>(item?.size_options ?? [...SIZE_OPTIONS]);
+  return (
+    <fieldset className="mt-4 rounded-lg border border-stone-200 p-4">
+      <legend className="px-1 text-sm font-medium text-stone-700">Tamanhos e preços</legend>
+      <label className="block text-sm text-stone-700">Como cobrar
+        <select name="pricing_mode" value={mode} onChange={(event) => setMode(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2">
+          <option value="single">Preço único para todos os tamanhos</option>
+          <option value="sizes">Preço diferente por tamanho</option>
+        </select>
+      </label>
+      <label className={mode === "single" ? "mt-3 block text-sm text-stone-700" : "hidden"}>Preço único (R$, opcional)
+        <input name="price" disabled={mode !== "single"} inputMode="decimal" placeholder="0,00" defaultValue={item?.price?.toFixed(2).replace(".", ",") ?? ""} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" />
+      </label>
+      <p className="mt-3 text-xs text-stone-500">{mode === "sizes" ? "Selecione os tamanhos disponíveis e informe o preço de cada um." : "Selecione os tamanhos disponíveis. O mesmo preço será aplicado a todos."}</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {SIZE_OPTIONS.map((size) => (
+          <div key={size} className="rounded-lg border border-stone-200 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" name="sizes" value={size} checked={sizes.includes(size)} onChange={(event) => setSizes((current) => event.target.checked ? [...current, size] : current.filter((value) => value !== size))} className="size-4" />
+              Tamanho {size}
+            </label>
+            <label className={mode === "sizes" ? "mt-2 block text-xs text-stone-600" : "hidden"}>Preço {size} (R$)
+              <input name={`price_${size}`} inputMode="decimal" required={mode === "sizes" && sizes.includes(size)} disabled={mode !== "sizes" || !sizes.includes(size)} defaultValue={(item?.size_prices?.[size] ?? item?.price)?.toFixed(2).replace(".", ",") ?? ""} placeholder="0,00" className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm disabled:bg-stone-100" />
+            </label>
+          </div>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 

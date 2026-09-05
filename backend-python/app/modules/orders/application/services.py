@@ -10,6 +10,8 @@ from app.modules.orders.domain.entities import (
     DailyProductionSummary,
     MealTimeProductionSummary,
     Order,
+    PaymentMethod,
+    PaymentStatus,
     ProductionItemSummary,
     ProductionSizeSummary,
     ProductionStatus,
@@ -28,6 +30,13 @@ ALLOWED_STATUS_TRANSITIONS = {
 }
 
 
+def is_production_eligible(order: Order) -> bool:
+    return not (
+        order.payment_method is PaymentMethod.PIX
+        and order.payment_status is not PaymentStatus.PAID
+    )
+
+
 class OrderApplicationService:
     def __init__(self, repository: OrderRepository) -> None:
         self.repository = repository
@@ -38,9 +47,12 @@ class OrderApplicationService:
         end: date,
         company_id: UUID | None = None,
         production_status: ProductionStatus | None = None,
+        employee_cpf: str | None = None,
     ) -> list[Order]:
         self._validate_period(start, end)
-        return await self.repository.list(start, end, company_id, production_status)
+        return await self.repository.list(
+            start, end, company_id, production_status, employee_cpf
+        )
 
     async def by_id(self, order_id: UUID, company_id: UUID | None = None) -> Order:
         order = await self.repository.by_id(order_id)
@@ -54,6 +66,7 @@ class OrderApplicationService:
             order
             for order in orders
             if order.production_status is not ProductionStatus.CANCELLED
+            and is_production_eligible(order)
         ]
 
     async def production_summary(
@@ -61,7 +74,10 @@ class OrderApplicationService:
     ) -> DailyProductionSummary:
         orders = await self.repository.list(summary_date, summary_date)
         included_orders = [
-            order for order in orders if order.production_status is not ProductionStatus.CANCELLED
+            order
+            for order in orders
+            if order.production_status is not ProductionStatus.CANCELLED
+            and is_production_eligible(order)
         ]
         groups: dict[datetime | None, dict] = {}
         company_groups: dict[UUID, dict] = {}
@@ -224,6 +240,8 @@ class OrderApplicationService:
         order = await self.repository.by_id(order_id, for_update=True)
         if order is None:
             raise OrderNotFoundError()
+        if not is_production_eligible(order):
+            raise InvalidProductionStatusTransitionError()
         if ALLOWED_STATUS_TRANSITIONS.get(order.production_status) is not new_status:
             raise InvalidProductionStatusTransitionError()
         updated = await self.repository.update_status(

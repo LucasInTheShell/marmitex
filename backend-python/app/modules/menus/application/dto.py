@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -23,6 +23,7 @@ class MenuItemResult:
     price: Decimal | None
     image_url: str | None
     images: list[MenuItemImageResult]
+    size_prices: dict[str, Decimal] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

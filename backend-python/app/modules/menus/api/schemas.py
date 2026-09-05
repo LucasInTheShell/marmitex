@@ -24,6 +24,7 @@ class MenuItemResponse(BaseModel):
     description: str | None
     size_options: list[SizeOption]
     price: float | None
+    size_prices: dict[SizeOption, float] = Field(default_factory=dict)
     image_url: str | None = None
     images: list[MenuItemImageResponse] = Field(default_factory=list)
 

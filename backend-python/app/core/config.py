@@ -28,6 +28,20 @@ class Settings(BaseSettings):
     storage_region: str = "us-east-1"
     storage_access_key_id: str | None = None
     storage_secret_access_key: str | None = None
+    asaas_api_key: str | None = None
+    asaas_webhook_token: str | None = None
+    asaas_api_url: str = "https://api-sandbox.asaas.com/v3"
+    asaas_request_timeout_seconds: float = Field(default=10, ge=1, le=30)
+    asaas_user_agent: str = "mavi-connect/0.1.0"
+    payment_worker_interval_seconds: int = Field(default=15, ge=5, le=300)
+
+    @field_validator("asaas_api_url")
+    @classmethod
+    def validate_asaas_url(cls, value: str) -> str:
+        value = value.rstrip("/")
+        if value not in {"https://api-sandbox.asaas.com/v3", "https://api.asaas.com/v3"}:
+            raise ValueError("ASAAS_API_URL must be an official Asaas endpoint")
+        return value
 
     @field_validator("database_url")
     @classmethod
@@ -43,6 +57,17 @@ class Settings(BaseSettings):
             ZoneInfo(value)
         except ZoneInfoNotFoundError as error:
             raise ValueError("APP_TIME_ZONE must be a valid IANA timezone") from error
+        return value
+
+    @field_validator("asaas_webhook_token")
+    @classmethod
+    def validate_asaas_webhook_token(cls, value: str | None) -> str | None:
+        if value and (
+            not 32 <= len(value) <= 255
+            or not value.isascii()
+            or any(character.isspace() for character in value)
+        ):
+            raise ValueError("ASAAS_WEBHOOK_TOKEN must have between 32 and 255 characters")
         return value
 
     @model_validator(mode="after")

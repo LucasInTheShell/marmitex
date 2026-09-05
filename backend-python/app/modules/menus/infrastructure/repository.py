@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from psycopg import AsyncConnection
+from psycopg.types.json import Jsonb
 
 from app.modules.menus.domain.entities import AvailableMenu, Menu, MenuItem, MenuItemImage
 from app.modules.menus.infrastructure.models import menu_from_row, menu_item_from_row
@@ -21,6 +22,7 @@ class PostgresMenuRepository:
                 mi.description,
                 mi.size_options,
                 mi.price,
+                mi.size_prices,
                 coalesce((
                     select jsonb_agg(
                         jsonb_build_object(
@@ -49,6 +51,7 @@ class PostgresMenuRepository:
                 mi.description,
                 mi.size_options,
                 mi.price,
+                mi.size_prices,
                 coalesce((
                     select jsonb_agg(
                         jsonb_build_object(
@@ -77,17 +80,27 @@ class PostgresMenuRepository:
         size_options: list[str],
         price: Decimal | None,
         images: list[MenuItemImage],
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItem:
         async with self.connection.transaction():
             await self.connection.execute(
                 """
-                insert into menu_items (id, name, description, size_options, price)
-                values (%s, %s, %s, %s, %s)
+                insert into menu_items (id, name, description, size_options, price, size_prices)
+                values (%s, %s, %s, %s, %s, %s)
                 """,
-                (item_id, name, description, size_options, price),
+                (
+                    item_id,
+                    name,
+                    description,
+                    size_options,
+                    price,
+                    Jsonb(
+                        {size: format(value, ".2f") for size, value in (size_prices or {}).items()}
+                    ),
+                ),
             )
             await self._insert_images(item_id, images)
-        return MenuItem(item_id, name, description, size_options, price, images)
+        return MenuItem(item_id, name, description, size_options, price, images, size_prices or {})
 
     async def update_item(
         self,
@@ -97,6 +110,7 @@ class PostgresMenuRepository:
         size_options: list[str],
         price: Decimal | None,
         images: list[MenuItemImage],
+        size_prices: dict[str, Decimal] | None = None,
     ) -> MenuItem | None:
         async with self.connection.transaction():
             result = await self.connection.execute(
@@ -105,10 +119,20 @@ class PostgresMenuRepository:
                 set name = %s,
                     description = %s,
                     size_options = %s,
-                    price = %s
+                    price = %s,
+                    size_prices = %s
                 where id = %s and deleted_at is null
                 """,
-                (name, description, size_options, price, item_id),
+                (
+                    name,
+                    description,
+                    size_options,
+                    price,
+                    Jsonb(
+                        {size: format(value, ".2f") for size, value in (size_prices or {}).items()}
+                    ),
+                    item_id,
+                ),
             )
             if result.rowcount == 0:
                 return None
@@ -117,7 +141,7 @@ class PostgresMenuRepository:
                 (item_id,),
             )
             await self._insert_images(item_id, images)
-        return MenuItem(item_id, name, description, size_options, price, images)
+        return MenuItem(item_id, name, description, size_options, price, images, size_prices or {})
 
     async def delete_item(self, item_id: UUID) -> MenuItem | None:
         current = await self.item_by_id(item_id)
@@ -170,6 +194,7 @@ class PostgresMenuRepository:
                 mi.description,
                 mi.size_options,
                 mi.price,
+                mi.size_prices,
                 coalesce((
                     select jsonb_agg(
                         jsonb_build_object(
@@ -227,9 +252,7 @@ class PostgresMenuRepository:
         )
         return result.rowcount
 
-    async def _insert_images(
-        self, item_id: UUID, images: list[MenuItemImage]
-    ) -> None:
+    async def _insert_images(self, item_id: UUID, images: list[MenuItemImage]) -> None:
         for image in images:
             await self.connection.execute(
                 """

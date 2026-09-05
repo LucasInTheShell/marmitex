@@ -68,6 +68,7 @@ async def create_order(
                 for item in payload.items
             ],
             idempotency_key=idempotency_key,
+            payment_method=payload.payment_method,
         ),
         now,
         time_zone,

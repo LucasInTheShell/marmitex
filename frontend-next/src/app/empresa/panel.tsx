@@ -1,15 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useOptimistic, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 
-import { cancelOrderAction, createOrderAction } from "@/app/empresa/actions";
+import {
+  cancelOrderAction,
+  createCompanyPixCheckoutAction,
+  createOrderAction,
+  switchCompanyPaymentToDeliveryAction,
+} from "@/app/empresa/actions";
+import { PixPaymentPanel } from "@/components/pix-payment-panel";
+import { menuPriceLabel, priceForSize } from "@/lib/menu-pricing";
 import { formatOrderDate } from "@/lib/demo-orders";
 import {
   ORDER_STATUSES,
   addToCart,
   cartQuantity,
   cartTotal,
+  paymentLabel,
   type CartItem,
 } from "@/lib/orders";
 import type {
@@ -17,6 +25,9 @@ import type {
   MealSchedule,
   MenuItemImage,
   Order,
+  PaymentMethod,
+  PaymentStatus,
+  PixCheckout,
   ProductionStatus,
   SizeOption,
 } from "@/lib/types";
@@ -36,6 +47,8 @@ type CompanyPanelProps = {
   cutoffLeadMinutes: number;
   availableMenus: AvailableMenu[];
   initialOrders: Order[];
+  historyStart: string;
+  historyEnd: string;
 };
 
 export function CompanyPanel({
@@ -44,14 +57,10 @@ export function CompanyPanel({
   cutoffLeadMinutes,
   availableMenus,
   initialOrders,
+  historyStart,
+  historyEnd,
 }: CompanyPanelProps) {
-  const [orders, updateOrders] = useOptimistic(
-    initialOrders,
-    (current, update: { kind: "add" | "replace"; order: Order }) =>
-      update.kind === "add"
-        ? [update.order, ...current]
-        : current.map((item) => item.id === update.order.id ? update.order : item),
-  );
+  const [orders, setOrders] = useState(initialOrders);
   const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(availableMenus[0]?.date ?? "");
   const [selectedScheduleId, setSelectedScheduleId] = useState(availableMenus[0]?.available_schedules[0]?.id ?? "");
@@ -60,9 +69,18 @@ export function CompanyPanel({
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_delivery");
+  const [activePix, setActivePix] = useState<{ order: Order; checkout: PixCheckout } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | ProductionStatus>("all");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | PaymentStatus>("all");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  function updateOrders(update: { kind: "add" | "replace"; order: Order }) {
+    setOrders((current) => update.kind === "add"
+      ? [update.order, ...current]
+      : current.map((item) => item.id === update.order.id ? update.order : item));
+  }
 
   useEffect(() => {
     const update = () => setCurrentTime(Date.now());
@@ -93,6 +111,7 @@ export function CompanyPanel({
   const effectiveDate = selectedMenu?.date ?? "";
   const selectedDish = selectedMenu?.items.find((item) => item.id === selectedMenuItem) ?? selectedMenu?.items[0];
   const effectiveSize = selectedDish?.size_options.includes(selectedSize) ? selectedSize : selectedDish?.size_options[0];
+  const selectedPrice = selectedDish && effectiveSize ? priceForSize(selectedDish, effectiveSize) : null;
   const selectedSchedule = selectedMenu?.available_schedules.find((schedule) => schedule.id === selectedScheduleId) ?? selectedMenu?.available_schedules[0];
 
   const sortedOrders = useMemo(
@@ -100,7 +119,9 @@ export function CompanyPanel({
     [orders],
   );
   const filteredOrders = sortedOrders.filter(
-    (order) => statusFilter === "all" || order.production_status === statusFilter,
+    (order) =>
+      (statusFilter === "all" || order.production_status === statusFilter)
+      && (paymentFilter === "all" || order.payment_status === paymentFilter),
   );
   const activeOrders = orders.filter(
     (order) => !["delivered", "cancelled"].includes(order.production_status),
@@ -118,7 +139,7 @@ export function CompanyPanel({
   }
 
   function addSelectedItem() {
-    if (!selectedDish || !effectiveSize || selectedDish.price === null) {
+    if (!selectedDish || !effectiveSize || selectedPrice === null) {
       setMessage("Escolha um prato com preço cadastrado.");
       return;
     }
@@ -140,7 +161,7 @@ export function CompanyPanel({
       item_name: selectedDish.name,
       size: effectiveSize,
       quantity,
-      unit_price: selectedDish.price,
+      unit_price: selectedPrice,
       notes: notes.trim() || null,
     }));
     setQuantity(1);
@@ -173,6 +194,7 @@ export function CompanyPanel({
         employee_department: String(form.get("department") ?? "").trim(),
         employee_cpf: cpf,
         employee_internal_id: String(form.get("employeeInternalId") ?? "").trim() || null,
+        payment_method: paymentMethod,
         items: cart.map((item) => ({
           menu_item_id: item.menu_item_id,
           size: item.size,
@@ -187,8 +209,19 @@ export function CompanyPanel({
       updateOrders({ kind: "add", order: result.order });
       setCart([]);
       formElement.reset();
-      setMessage(`Pedido #${result.order.order_number} criado com sucesso.`);
-      window.setTimeout(() => document.querySelector("#pedidos")?.scrollIntoView(), 150);
+      if (paymentMethod === "pix") {
+        const pix = await createCompanyPixCheckoutAction(result.order.id);
+        if (pix.error || !pix.checkout) {
+          setMessage(pix.error ?? "O pedido foi criado, mas não foi possível abrir o Pix. Continue pelo histórico.");
+          return;
+        }
+        setActivePix({ order: result.order, checkout: pix.checkout });
+        setMessage(`Pedido #${result.order.order_number} criado. Conclua o Pix para liberá-lo à cozinha.`);
+        window.setTimeout(() => document.querySelector("#pagamento-pix")?.scrollIntoView(), 150);
+      } else {
+        setMessage(`Pedido #${result.order.order_number} criado com sucesso.`);
+        window.setTimeout(() => document.querySelector("#pedidos")?.scrollIntoView(), 150);
+      }
     });
   }
 
@@ -203,6 +236,31 @@ export function CompanyPanel({
       updateOrders({ kind: "replace", order: result.order });
       setMessage(`Pedido #${order.order_number} cancelado.`);
     });
+  }
+
+  function resumePix(order: Order) {
+    setMessage("");
+    startTransition(async () => {
+      const result = await createCompanyPixCheckoutAction(order.id);
+      if (result.error || !result.checkout) {
+        setMessage(result.error ?? "Não foi possível continuar o Pix.");
+        return;
+      }
+      setActivePix({ order, checkout: result.checkout });
+      window.setTimeout(() => document.querySelector("#pagamento-pix")?.scrollIntoView(), 150);
+    });
+  }
+
+  async function switchPixToDelivery(orderId: string): Promise<Order | null> {
+    const result = await switchCompanyPaymentToDeliveryAction(orderId);
+    if (!result.order) {
+      setMessage(result.error ?? "Não foi possível alterar a forma de pagamento.");
+      return null;
+    }
+    updateOrders({ kind: "replace", order: result.order });
+    setActivePix(null);
+    setMessage(`Pedido #${result.order.order_number} alterado para pagamento na entrega.`);
+    return result.order;
   }
 
   return (
@@ -255,7 +313,7 @@ export function CompanyPanel({
                     <input type="radio" name="menuItem" checked={selectedDish?.id === item.id} onChange={() => { setSelectedMenuItem(item.id); setSelectedSize(item.size_options[0]); }} className="mt-1 accent-[#216450]" />
                     {item.image_url ? <Image src={item.image_url} alt="" width={72} height={54} className="h-[54px] w-[72px] rounded-md object-cover" /> : null}
                     <span className="min-w-0 flex-1"><strong className="block text-sm text-stone-900">{item.name}</strong><span className="mt-1 block text-sm text-stone-500">{item.description}</span></span>
-                    <strong className="text-sm">{item.price === null ? "Sem preço" : CURRENCY.format(item.price)}</strong>
+                    <strong className="text-sm">{menuPriceLabel(item)}</strong>
                   </label>
                 )) : <p className="px-4 py-8 text-center text-sm text-stone-500">Nenhum cardápio publicado com horário disponível.</p>}
               </div>
@@ -266,13 +324,13 @@ export function CompanyPanel({
                 <fieldset>
                   <legend className="text-sm font-medium text-stone-700">Tamanho</legend>
                   <div className="mt-2 flex overflow-hidden rounded-md border border-stone-300">
-                    {(selectedDish?.size_options ?? []).map((size) => <button key={size} type="button" onClick={() => setSelectedSize(size)} className={`h-10 flex-1 border-r border-stone-300 last:border-0 ${effectiveSize === size ? "bg-[#216450] text-white" : "bg-white"}`}>{size}</button>)}
+                    {(selectedDish?.size_options ?? []).map((size) => <button key={size} type="button" onClick={() => setSelectedSize(size)} className={`min-h-14 flex-1 border-r border-stone-300 last:border-0 ${effectiveSize === size ? "bg-[#216450] text-white" : "bg-white"}`}>{size}<span className="block text-xs">{selectedDish && priceForSize(selectedDish, size) !== null ? CURRENCY.format(priceForSize(selectedDish, size)!) : "Sem preço"}</span></button>)}
                   </div>
                 </fieldset>
                 <label className="text-sm font-medium text-stone-700">Quantidade<input type="number" min={1} max={10} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2" /></label>
               </div>
               <label className="mt-4 block text-sm font-medium text-stone-700">Observação deste item<input value={notes} maxLength={300} onChange={(event) => setNotes(event.target.value)} placeholder="Ex.: sem cebola" className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2.5" /></label>
-              <button type="button" onClick={addSelectedItem} disabled={!selectedDish || selectedDish.price === null} className="mt-4 rounded-md border border-[#216450] px-4 py-2.5 text-sm font-semibold text-[#216450] hover:bg-emerald-50 disabled:opacity-40">Adicionar ao pedido</button>
+              <button type="button" onClick={addSelectedItem} disabled={!selectedDish || selectedPrice === null} className="mt-4 rounded-md border border-[#216450] px-4 py-2.5 text-sm font-semibold text-[#216450] hover:bg-emerald-50 disabled:opacity-40">Adicionar ao pedido</button>
             </fieldset>
 
             <fieldset className="p-5 sm:p-6">
@@ -303,30 +361,66 @@ export function CompanyPanel({
               <div className="flex justify-between"><dt>Horário</dt><dd>{selectedSchedule?.meal_time.slice(0, 5) ?? "—"}</dd></div>
               <div className="flex justify-between text-base font-semibold"><dt>Total</dt><dd>{CURRENCY.format(cartTotal(cart))}</dd></div>
             </dl>
+            <fieldset className="mb-4 border-t border-stone-200 pt-4">
+              <legend className="text-sm font-semibold text-stone-800">Forma de pagamento</legend>
+              <div className="mt-2 grid gap-2">
+                <label className="flex cursor-pointer gap-3 rounded-md border border-stone-200 p-3 text-sm">
+                  <input type="radio" checked={paymentMethod === "pay_on_delivery"} onChange={() => setPaymentMethod("pay_on_delivery")} className="accent-[#216450]" />
+                  <span><strong className="block">Pagar na entrega</strong><span className="text-xs text-stone-500">O pedido segue diretamente para a cozinha.</span></span>
+                </label>
+                <label className="flex cursor-pointer gap-3 rounded-md border border-stone-200 p-3 text-sm">
+                  <input type="radio" checked={paymentMethod === "pix"} onChange={() => setPaymentMethod("pix")} className="accent-[#216450]" />
+                  <span><strong className="block">Pix no aplicativo</strong><span className="text-xs text-stone-500">Liberado à cozinha somente após confirmação.</span></span>
+                </label>
+              </div>
+            </fieldset>
             {message ? <p role="status" className="mb-3 rounded-md bg-stone-100 px-3 py-2 text-sm text-stone-700">{message}</p> : null}
             <button type="submit" disabled={isPending || cart.length === 0 || !selectedSchedule} className="w-full rounded-md bg-[#216450] px-4 py-3 text-sm font-semibold text-white hover:bg-[#173f34] disabled:bg-stone-300">{isPending ? "Enviando..." : "Confirmar pedido"}</button>
           </aside>
         </form>
       </section>
 
+      {activePix ? (
+        <div id="pagamento-pix" className="scroll-mt-24">
+          <PixPaymentPanel
+            checkout={activePix.checkout}
+            order={activePix.order}
+            statusUrl={`/empresa/api/orders/${activePix.order.id}`}
+            onOrderUpdated={(updated) => {
+              updateOrders({ kind: "replace", order: updated });
+              setActivePix((current) => current ? { ...current, order: updated } : null);
+            }}
+            onSwitchToDelivery={() => switchPixToDelivery(activePix.order.id)}
+          />
+        </div>
+      ) : null}
+
       <section id="pedidos" className="scroll-mt-24 pb-8">
         <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div><h2 className="text-lg font-semibold text-stone-900">Pedidos da empresa</h2><p className="mt-1 text-sm text-stone-500">Dados reais salvos pela API.</p></div>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"><option value="all">Todos os estados</option>{ORDER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select>
+          <div className="flex flex-wrap gap-2">
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"><option value="all">Toda produção</option>{ORDER_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select>
+            <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as typeof paymentFilter)} className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"><option value="all">Todo pagamento</option><option value="pending">Aguardando pagamento</option><option value="processing">Processando</option><option value="paid">Pago</option><option value="not_applicable">Na entrega</option><option value="failed">Falhou</option><option value="expired">Expirado</option><option value="cancelled">Cancelado</option></select>
+          </div>
         </div>
+        <form method="get" className="mb-4 grid gap-3 rounded-md border border-stone-200 bg-white p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="text-sm font-medium text-stone-700">De<input type="date" name="start" defaultValue={historyStart} className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2" /></label>
+          <label className="text-sm font-medium text-stone-700">Até<input type="date" name="end" defaultValue={historyEnd} className="mt-1 block w-full rounded-md border border-stone-300 px-3 py-2" /></label>
+          <button className="rounded-md border border-[#216450] px-4 py-2 text-sm font-semibold text-[#216450]">Buscar período</button>
+        </form>
         <div className="space-y-3">
           {filteredOrders.length ? filteredOrders.map((order) => {
             const status = ORDER_STATUSES.find((item) => item.value === order.production_status)!;
-            const canCancel = order.production_status === "pending" && order.cutoff_at !== null && currentTime !== null && Date.parse(order.cutoff_at) > currentTime;
+            const canCancel = order.production_status === "pending" && order.cutoff_at !== null && currentTime !== null && Date.parse(order.cutoff_at) > currentTime && (order.payment_method !== "pix" || ["pending", "failed", "expired"].includes(order.payment_status));
             return (
               <article key={order.id} className="rounded-md border border-stone-200 bg-white p-4 sm:p-5">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2"><strong>Pedido #{order.order_number}</strong><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLES[order.production_status]}`}>{status.label}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><strong>Pedido #{order.order_number}</strong><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLES[order.production_status]}`}>{status.label}</span><span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700">{paymentLabel(order.payment_method, order.payment_status)}</span></div>
                     <p className="mt-1 text-sm text-stone-500">{formatOrderDate(order.date, true)} · {order.meal_schedule_label ?? "Horário"} {order.scheduled_for ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(order.scheduled_for)) : ""}</p>
                     <p className="mt-1 text-sm text-stone-600">{order.employee_name} · {order.employee_department}</p>
                   </div>
-                  <div className="text-left sm:text-right"><strong>{CURRENCY.format(order.total_price)}</strong>{canCancel ? <button type="button" disabled={isPending} onClick={() => cancel(order)} className="mt-2 block text-sm text-red-700 hover:underline sm:ml-auto">Cancelar pedido</button> : null}</div>
+                  <div className="text-left sm:text-right"><strong>{CURRENCY.format(order.total_price)}</strong>{canCancel && order.payment_method === "pix" && order.payment_status === "pending" ? <><button type="button" disabled={isPending} onClick={() => resumePix(order)} className="mt-2 block text-sm font-semibold text-[#216450] hover:underline sm:ml-auto">Continuar Pix</button><button type="button" disabled={isPending} onClick={() => void switchPixToDelivery(order.id)} className="mt-2 block text-sm text-[#216450] hover:underline sm:ml-auto">Pagar na entrega</button></> : null}{canCancel ? <button type="button" disabled={isPending} onClick={() => cancel(order)} className="mt-2 block text-sm text-red-700 hover:underline sm:ml-auto">Cancelar pedido</button> : null}</div>
                 </div>
                 <ul className="mt-4 divide-y divide-stone-100 border-t border-stone-100">
                   {order.items.map((item) => <li key={item.id} className="flex justify-between gap-3 py-2 text-sm"><span>{item.quantity}× {item.item_name} · {item.size}{item.notes ? ` · ${item.notes}` : ""}</span><span>{CURRENCY.format(item.subtotal)}</span></li>)}

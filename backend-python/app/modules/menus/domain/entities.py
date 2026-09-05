@@ -20,6 +20,12 @@ class MenuItem:
     size_options: list[str]
     price: Decimal | None
     images: list[MenuItemImage] = field(default_factory=list)
+    size_prices: dict[str, Decimal] = field(default_factory=dict)
+
+    def price_for_size(self, size: str) -> Decimal | None:
+        if size not in self.size_options:
+            return None
+        return self.size_prices.get(size, self.price)
 
 
 @dataclass(frozen=True, slots=True)
