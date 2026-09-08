@@ -11,13 +11,14 @@ export default function EmployeeEntryPage() {
           Seu almoço escolhido em poucos passos.
         </h1>
         <p className="mt-4 max-w-lg text-base leading-7 text-emerald-50/75">
-          Identifique-se, escolha sua marmita, revise o pedido e confirme. A experiência foi pensada primeiro para tablets.
+          Identifique-se, escolha sua marmita, revise, pague e confirme. A experiência foi pensada primeiro para tablets.
         </p>
         <ol className="mt-10 grid grid-cols-2 gap-3 text-sm">
           {[
             "Identificação",
             "Escolha da marmita",
             "Revisão do pedido",
+            "Pagamento",
             "Confirmação",
           ].map((step, index) => (
             <li key={step} className="rounded-xl border border-white/10 bg-white/5 p-4">

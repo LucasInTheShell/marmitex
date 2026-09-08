@@ -1,4 +1,10 @@
-from app.modules.orders.domain.entities import Order, OrderItem, ProductionStatus
+from app.modules.orders.domain.entities import (
+    Order,
+    OrderItem,
+    PaymentMethod,
+    PaymentStatus,
+    ProductionStatus,
+)
 
 
 def order_item_from_row(row: dict) -> OrderItem:
@@ -32,6 +38,12 @@ def order_from_row(row: dict, items: list[OrderItem]) -> Order:
         employee_cpf=row["employee_cpf"],
         employee_internal_id=row.get("employee_internal_id"),
         production_status=ProductionStatus(row["production_status"]),
+        payment_method=(
+            PaymentMethod(row["payment_method"])
+            if row.get("payment_method") is not None
+            else None
+        ),
+        payment_status=PaymentStatus(row["payment_status"]),
         total_price=row["total_price"],
         idempotency_key=row.get("idempotency_key"),
         request_fingerprint=row.get("request_fingerprint"),

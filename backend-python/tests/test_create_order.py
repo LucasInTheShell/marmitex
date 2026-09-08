@@ -13,7 +13,14 @@ from app.modules.orders.application.create_order import (
     CreateOrderCommand,
     RequestedOrderItem,
 )
-from app.modules.orders.domain.entities import Order, OrderDraft, OrderItem, ProductionStatus
+from app.modules.orders.domain.entities import (
+    Order,
+    OrderDraft,
+    OrderItem,
+    PaymentMethod,
+    PaymentStatus,
+    ProductionStatus,
+)
 from app.modules.orders.domain.exceptions import (
     IdempotencyConflictError,
     MenuItemUnavailableError,
@@ -100,6 +107,7 @@ def command(
     items: list[RequestedOrderItem],
     *,
     idempotency_key: str | None = None,
+    payment_method: PaymentMethod = PaymentMethod.PAY_ON_DELIVERY,
 ) -> CreateOrderCommand:
     return CreateOrderCommand(
         company_id=company_id,
@@ -112,6 +120,7 @@ def command(
         employee_internal_id=" 1042 ",
         items=items,
         idempotency_key=idempotency_key,
+        payment_method=payment_method,
     )
 
 
@@ -154,6 +163,8 @@ def order_from_draft(draft: OrderDraft) -> Order:
             )
             for item in draft.items
         ],
+        payment_method=draft.payment_method,
+        payment_status=draft.payment_status,
     )
 
 
@@ -303,3 +314,36 @@ async def test_same_idempotency_key_replays_only_the_same_request() -> None:
     )
     with pytest.raises(IdempotencyConflictError):
         await use_case.execute(changed, NOW, "America/Sao_Paulo")
+
+
+@pytest.mark.asyncio
+async def test_pix_order_starts_awaiting_payment() -> None:
+    company, schedule = company_and_schedule()
+    item = MenuItem(
+        id=uuid4(),
+        name="Frango",
+        description=None,
+        size_options=["M"],
+        price=Decimal("20.00"),
+    )
+    repository = FakeOrderRepository()
+    use_case = CreateOrder(
+        repository,  # type: ignore[arg-type]
+        FakeCompanyRepository(company),  # type: ignore[arg-type]
+        FakeMenuRepository(menu(item)),  # type: ignore[arg-type]
+        FakeSettingsRepository(),  # type: ignore[arg-type]
+    )
+
+    await use_case.execute(
+        command(
+            company.id,
+            schedule.id,
+            [RequestedOrderItem(item.id, "M", 1)],
+            payment_method=PaymentMethod.PIX,
+        ),
+        NOW,
+        "America/Sao_Paulo",
+    )
+
+    assert repository.created_drafts[0].payment_method is PaymentMethod.PIX
+    assert repository.created_drafts[0].payment_status is PaymentStatus.PENDING

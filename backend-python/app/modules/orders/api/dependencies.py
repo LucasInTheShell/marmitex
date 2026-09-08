@@ -12,6 +12,7 @@ from app.modules.orders.application.cancel_order import CancelOrder
 from app.modules.orders.application.create_order import CreateOrder
 from app.modules.orders.application.services import OrderApplicationService
 from app.modules.orders.infrastructure.repository import PostgresOrderRepository
+from app.modules.payments.api.dependencies import PaymentServiceDependency
 
 
 def create_order_use_case(connection: DatabaseConnection) -> CreateOrder:
@@ -23,8 +24,11 @@ def create_order_use_case(connection: DatabaseConnection) -> CreateOrder:
     )
 
 
-def cancel_order_use_case(connection: DatabaseConnection) -> CancelOrder:
-    return CancelOrder(PostgresOrderRepository(connection))
+def cancel_order_use_case(
+    connection: DatabaseConnection,
+    payments: PaymentServiceDependency,
+) -> CancelOrder:
+    return CancelOrder(PostgresOrderRepository(connection), payments)
 
 
 def order_service(connection: DatabaseConnection) -> OrderApplicationService:

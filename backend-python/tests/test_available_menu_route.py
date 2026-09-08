@@ -9,6 +9,7 @@ from app.main import create_app
 from app.modules.auth.api.dependencies import current_account
 from app.modules.auth.domain.entities import Account, AccountRole
 from app.modules.menus.api.dependencies import menu_service
+from app.modules.menus.application.dto import MenuItemResult
 from app.modules.menus.domain.entities import (
     AvailableMealSchedule,
     AvailableMenu,
@@ -22,6 +23,20 @@ class FakeMenuService:
     def __init__(self) -> None:
         self.saved_menus: list[tuple[date, list]] = []
         self.schedule_id = uuid4()
+        self.created_item: tuple | None = None
+
+    async def create_item(self, *values, size_prices=None) -> MenuItemResult:
+        self.created_item = values
+        return MenuItemResult(
+            id=uuid4(),
+            name=values[0],
+            description=values[1],
+            size_options=values[2],
+            price=values[3],
+            size_prices=size_prices or {},
+            image_url="https://images.example/menu-items/item/image.webp",
+            images=[],
+        )
 
     async def available(self, *_) -> list[AvailableMenu]:
         return [
@@ -165,3 +180,37 @@ def test_company_has_read_only_menu_access() -> None:
     assert available_response.status_code == 200
     assert admin_read_response.status_code == 403
     assert edit_response.status_code == 403
+
+
+def test_admin_creates_menu_item_with_multiple_images_and_primary_selection() -> None:
+    service = FakeMenuService()
+    app = app_for(AccountRole.ADMIN, service)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/menu-items",
+            data={
+                "name": "Lasanha",
+                "description": "Molho bolonhesa",
+                "size_options": ["M", "G"],
+                "price": "26.90",
+                "primary_image_index": "1",
+            },
+            files=[
+                ("images", ("lasanha.png", b"first-image", "image/png")),
+                ("images", ("lasanha-2.jpg", b"second-image", "image/jpeg")),
+            ],
+        )
+
+    assert response.status_code == 201
+    assert response.json()["image_url"].endswith("image.webp")
+    assert service.created_item is not None
+    assert service.created_item[0:4] == (
+        "Lasanha",
+        "Molho bolonhesa",
+        ["M", "G"],
+        Decimal("26.90"),
+    )
+    assert service.created_item[4][0].filename == "lasanha.png"
+    assert service.created_item[4][1].filename == "lasanha-2.jpg"
+    assert service.created_item[5] == 1

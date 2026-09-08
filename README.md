@@ -35,6 +35,7 @@ backend-python/app/
 │   ├── menus/
 │   ├── orders/
 │   ├── operations/
+│   ├── payments/
 │   └── kitchen/
 └── cli/
 
@@ -72,6 +73,13 @@ aplique a incremental antes de reconstruir os serviços:
 ```bash
 docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0002_operational_cutoff_and_company_meal_schedules.sql
 docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0003_multi_item_orders.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0004_menu_item_images_and_soft_delete.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0005_menu_item_image_gallery.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0006_employees_and_cpf_access.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0007_stripe_pix_payments.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0008_asaas_payment_provider.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0009_payment_reliability.sql
+docker compose exec database psql -v ON_ERROR_STOP=1 -U mavi -d mavi_connect -f /docker-entrypoint-initdb.d/0010_menu_item_size_prices.sql
 ```
 
 Ou execute os processos separadamente após aplicar, em ordem, todos os arquivos
@@ -141,3 +149,9 @@ exibida.
 Use a connection string PostgreSQL do projeto apenas como `DATABASE_URL` do
 backend. Aplique as migrations de `migrations/` com uma conta de deploy. Não
 configure variáveis `NEXT_PUBLIC_SUPABASE_*` no frontend.
+
+Para configurar as fotos dos pratos no storage local ou no Supabase Storage,
+consulte [docs/IMAGENS_DOS_PRATOS.md](docs/IMAGENS_DOS_PRATOS.md).
+
+Para configurar, testar no sandbox e operar pagamentos Pix via Asaas, consulte
+[docs/PAGAMENTOS_ASAAS_PIX.md](docs/PAGAMENTOS_ASAAS_PIX.md).

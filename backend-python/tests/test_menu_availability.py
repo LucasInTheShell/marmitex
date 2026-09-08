@@ -13,6 +13,16 @@ from app.modules.menus.infrastructure.models import menu_item_from_row
 from app.modules.operations.domain.entities import OperationalSettings
 
 
+class FakeStorage:
+    def public_url(self, key: str) -> str:
+        return f"https://images.example/{key}"
+
+
+class UnusedImageProcessor:
+    def process(self, _):
+        raise AssertionError("No image should be processed in availability tests")
+
+
 class FakeMenuRepository:
     def __init__(self, menus: list[AvailableMenu]) -> None:
         self.menus = menus
@@ -88,6 +98,8 @@ async def test_today_remains_available_while_a_later_schedule_is_open() -> None:
         repository,  # type: ignore[arg-type]
         FakeCompanyRepository(company),  # type: ignore[arg-type]
         FakeSettingsRepository(),  # type: ignore[arg-type]
+        FakeStorage(),  # type: ignore[arg-type]
+        UnusedImageProcessor(),  # type: ignore[arg-type]
     )
 
     available = await service.available(
@@ -117,6 +129,8 @@ async def test_today_disappears_when_every_schedule_reaches_cutoff() -> None:
         repository,  # type: ignore[arg-type]
         FakeCompanyRepository(company),  # type: ignore[arg-type]
         FakeSettingsRepository(),  # type: ignore[arg-type]
+        FakeStorage(),  # type: ignore[arg-type]
+        UnusedImageProcessor(),  # type: ignore[arg-type]
     )
 
     available = await service.available(
@@ -147,6 +161,8 @@ async def test_empty_menu_is_not_available() -> None:
         repository,  # type: ignore[arg-type]
         FakeCompanyRepository(company),  # type: ignore[arg-type]
         FakeSettingsRepository(),  # type: ignore[arg-type]
+        FakeStorage(),  # type: ignore[arg-type]
+        UnusedImageProcessor(),  # type: ignore[arg-type]
     )
 
     available = await service.available(
@@ -170,6 +186,8 @@ async def test_past_dates_and_days_without_company_service_are_hidden() -> None:
         repository,  # type: ignore[arg-type]
         FakeCompanyRepository(company),  # type: ignore[arg-type]
         FakeSettingsRepository(),  # type: ignore[arg-type]
+        FakeStorage(),  # type: ignore[arg-type]
+        UnusedImageProcessor(),  # type: ignore[arg-type]
     )
 
     available = await service.available(
@@ -191,6 +209,8 @@ async def test_available_menu_rejects_inverted_period() -> None:
         FakeMenuRepository([]),  # type: ignore[arg-type]
         FakeCompanyRepository(company),  # type: ignore[arg-type]
         FakeSettingsRepository(),  # type: ignore[arg-type]
+        FakeStorage(),  # type: ignore[arg-type]
+        UnusedImageProcessor(),  # type: ignore[arg-type]
     )
 
     with pytest.raises(InvalidMenuPeriodError):

@@ -33,6 +33,8 @@ ORDER_HEADER_SELECT = """
         o.employee_cpf,
         o.employee_internal_id,
         o.production_status,
+        o.payment_method,
+        o.payment_status,
         o.total_price,
         o.idempotency_key,
         o.request_fingerprint,
@@ -88,11 +90,14 @@ class PostgresOrderRepository:
                         employee_internal_id,
                         total_price,
                         idempotency_key,
-                        request_fingerprint
+                        request_fingerprint,
+                        payment_method,
+                        payment_status
                     )
                     values (
                         %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s
                     )
                     returning id
                     """,
@@ -111,6 +116,8 @@ class PostgresOrderRepository:
                         draft.total_price,
                         draft.idempotency_key,
                         draft.request_fingerprint,
+                        draft.payment_method.value,
+                        draft.payment_status.value,
                     ),
                 )
                 order_id = (await result.fetchone())["id"]
@@ -162,6 +169,7 @@ class PostgresOrderRepository:
         end: date,
         company_id: UUID | None = None,
         production_status: ProductionStatus | None = None,
+        employee_cpf: str | None = None,
         *,
         active_only: bool = False,
     ) -> list[Order]:
@@ -173,6 +181,9 @@ class PostgresOrderRepository:
         if production_status is not None:
             clauses.append("o.production_status = %s")
             parameters.append(production_status.value)
+        if employee_cpf is not None:
+            clauses.append("o.employee_cpf = %s")
+            parameters.append(employee_cpf)
         if active_only:
             clauses.append("o.production_status in ('pending', 'printed', 'separated')")
         query = (

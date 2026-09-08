@@ -7,7 +7,13 @@ import pytest
 
 from app.modules.orders.application.cancel_order import CancelOrder
 from app.modules.orders.application.services import OrderApplicationService
-from app.modules.orders.domain.entities import Order, OrderItem, ProductionStatus
+from app.modules.orders.domain.entities import (
+    Order,
+    OrderItem,
+    PaymentMethod,
+    PaymentStatus,
+    ProductionStatus,
+)
 from app.modules.orders.domain.exceptions import (
     InvalidOrderPeriodError,
     InvalidProductionStatusTransitionError,
@@ -192,6 +198,22 @@ async def test_production_board_includes_delivered_and_excludes_cancelled_orders
 
     repository.order = replace(delivered, production_status=ProductionStatus.CANCELLED)
     assert await service.production_board(date(2026, 8, 31)) == []
+
+
+@pytest.mark.asyncio
+async def test_production_board_excludes_pix_until_payment_is_confirmed() -> None:
+    unpaid = replace(
+        pending_order(),
+        payment_method=PaymentMethod.PIX,
+        payment_status=PaymentStatus.PENDING,
+    )
+    repository = FakeLifecycleRepository(unpaid)
+    service = OrderApplicationService(repository)  # type: ignore[arg-type]
+
+    assert await service.production_board(date(2026, 8, 31)) == []
+
+    repository.order = replace(unpaid, payment_status=PaymentStatus.PAID)
+    assert await service.production_board(date(2026, 8, 31)) == [repository.order]
 
 
 class FakeSummaryRepository:

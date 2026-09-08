@@ -22,8 +22,25 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://mavi:mavi@database:5432/mavi_connect}
       CORS_ORIGINS: '["http://localhost:3000"]'
       APP_TIME_ZONE: ${APP_TIME_ZONE:-America/Sao_Paulo}
+      EMPLOYEE_SESSION_TTL_HOURS: ${EMPLOYEE_SESSION_TTL_HOURS:-12}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-dish-images}
+      STORAGE_LOCAL_PATH: /app/media
+      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-http://localhost:8000/media}
+      STORAGE_ENDPOINT_URL: ${STORAGE_ENDPOINT_URL:-}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID:-}
+      STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY:-}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+      ASAAS_API_URL: ${ASAAS_API_URL:-https://api-sandbox.asaas.com/v3}
+      ASAAS_REQUEST_TIMEOUT_SECONDS: ${ASAAS_REQUEST_TIMEOUT_SECONDS:-10}
+      ASAAS_USER_AGENT: ${ASAAS_USER_AGENT:-mavi-connect/0.1.0}
+      PAYMENT_WORKER_INTERVAL_SECONDS: ${PAYMENT_WORKER_INTERVAL_SECONDS:-15}
     ports:
       - "8000:8000"
+    volumes:
+      - media-data:/app/media
     depends_on:
       database:
         condition: service_healthy
@@ -40,4 +57,5 @@ services:
 
 volumes:
   postgres-data:
+  media-data:
 

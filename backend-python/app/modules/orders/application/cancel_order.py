@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Protocol
 from uuid import UUID
 
 from app.modules.orders.domain.entities import Order, ProductionStatus
@@ -9,9 +10,18 @@ from app.modules.orders.domain.exceptions import (
 from app.modules.orders.domain.repositories import OrderRepository
 
 
+class PendingPaymentCanceller(Protocol):
+    async def cancel_pending_for_order(self, order_id: UUID, now: datetime) -> None: ...
+
+
 class CancelOrder:
-    def __init__(self, repository: OrderRepository) -> None:
+    def __init__(
+        self,
+        repository: OrderRepository,
+        payment_canceller: PendingPaymentCanceller | None = None,
+    ) -> None:
         self.repository = repository
+        self.payment_canceller = payment_canceller
 
     async def execute(
         self,
@@ -30,6 +40,9 @@ class CancelOrder:
             or now >= order.cutoff_at
         ):
             raise OrderCannotBeCancelledError()
+
+        if self.payment_canceller is not None:
+            await self.payment_canceller.cancel_pending_for_order(order_id, now)
 
         cancelled = await self.repository.cancel(
             order_id,
